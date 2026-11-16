@@ -4,7 +4,7 @@ A cosy real-time 1v1 word game for two phones. One of you creates a room, the
 other joins with a short code, and you take turns making a word from a fresh
 seven-letter scramble.
 
-**v0.1**
+**v0.2**
 
 Open the link on two phones, type a display name, tap **Create room** on one
 and **Join** on the other, then read out the four-letter code.
@@ -23,9 +23,10 @@ Then open `http://localhost:3000` on two browsers (or your phone on the same
 network).
 
 Each match is 6 turns each (12 in total). You have 60 seconds to make one
-word of at least 2 letters. Letter points are shown on every tile. The
-dictionary includes British spellings and obscure words; see
-[DICTIONARY.md](DICTIONARY.md) for sources and licences.
+word of at least 2 letters. Letter points are shown on every tile. While you
+build a word, a small “✓ word!” label appears under the rack if the selection
+is in the dictionary. The dictionary includes British spellings and obscure
+words; see [DICTIONARY.md](DICTIONARY.md) for sources and licences.
 
 ## Tests
 

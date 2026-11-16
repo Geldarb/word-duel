@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.1';
+  const VERSION = 'v0.2';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
@@ -36,6 +36,7 @@
     turnStatus: $('#turn-status'),
     turnCount: $('#turn-count'),
     rack: $('#word-rack'),
+    wordHint: $('#word-hint'),
     tray: $('#tile-tray'),
     clear: $('#btn-clear'),
     shuffle: $('#btn-shuffle'),
@@ -75,6 +76,11 @@
   let localEnd = 0;
   let leavingConfirmed = false;
   let coinAnimatedFor = '';
+  let checkTimer = null;
+  let checkSeq = 0;
+  let lastCheckedWord = '';
+  let lastCheckValid = false;
+
 
   const socket = io({
     transports: ['websocket', 'polling'],
@@ -301,6 +307,50 @@
     for (const tile of tiles) {
       els.tray.appendChild(makeTileButton(tile, false));
     }
+    scheduleWordCheck();
+  }
+
+  function currentSelection() {
+    return currentWord().map((t) => t.letter).join('');
+  }
+
+  function canCheckWord() {
+    return !!(state?.current?.yours && state.status === 'playing' && !state.current.paused);
+  }
+
+  function setWordHint(valid) {
+    els.wordHint.textContent = valid ? '✓ word!' : '';
+  }
+
+  function scheduleWordCheck() {
+    const word = currentSelection();
+    if (!canCheckWord() || word.length < 2) {
+      if (checkTimer) clearTimeout(checkTimer);
+      checkTimer = null;
+      checkSeq += 1;
+      lastCheckedWord = '';
+      lastCheckValid = false;
+      setWordHint(false);
+      return;
+    }
+    if (word === lastCheckedWord) {
+      setWordHint(lastCheckValid);
+      return;
+    }
+    setWordHint(false);
+    if (checkTimer) clearTimeout(checkTimer);
+    const seq = ++checkSeq;
+    checkTimer = setTimeout(() => {
+      checkTimer = null;
+      socket.emit('checkWord', { word }, (res) => {
+        if (seq !== checkSeq) return;
+        const current = currentSelection();
+        if (!res?.ok || res.word !== current) return;
+        lastCheckedWord = current;
+        lastCheckValid = !!res.valid;
+        setWordHint(lastCheckValid);
+      });
+    }, 200);
   }
 
   function makeTileButton(tile, inRack) {
@@ -400,9 +450,14 @@
 
   function goHome(clearSession) {
     if (timerId) clearInterval(timerId);
+    if (checkTimer) clearTimeout(checkTimer);
     tiles = [];
     state = null;
     coinAnimatedFor = '';
+    checkSeq += 1;
+    lastCheckedWord = '';
+    lastCheckValid = false;
+    setWordHint(false);
     if (clearSession) rememberToken('');
     showScreen('home');
     els.disconnect.hidden = true;
@@ -499,7 +554,11 @@
     const nextLetters = next?.current?.letters?.join('') || '';
     state = next;
     if (next?.you?.token) rememberToken(next.you.token);
-    if (prevLetters !== nextLetters) tiles = [];
+    if (prevLetters !== nextLetters) {
+      tiles = [];
+      lastCheckedWord = '';
+      lastCheckValid = false;
+    }
     renderState();
   });
 

@@ -13,7 +13,7 @@
   <link rel="icon" href="/icons/icon-192.png">
   <title>Word Duel</title>
   <link rel="stylesheet" href="/styles.css">
-  <!-- WD-v0.1 -->
+  <!-- WD-v0.2 -->
 </head>
 <body>
   <div id="app">
@@ -32,7 +32,7 @@
           <span class="mini-tile tilt-right">D<sub>2</sub></span>
         </div>
         <h1>Word Duel</h1>
-        <p class="version" data-testid="version">v0.1</p>
+        <p class="version" data-testid="version">v0.2</p>
         <p class="tagline">A cosy word match for two.</p>
       </div>
       <form id="home-form" class="home-form" autocomplete="off">
@@ -103,7 +103,10 @@
         <p id="turn-status" class="turn-status" data-testid="turn-status">Your turn</p>
         <p id="turn-count" class="turn-count" data-testid="turn-count">Turn 1 of 12</p>
       </div>
-      <div id="word-rack" class="word-rack" data-testid="word-rack" aria-label="Your word"></div>
+      <div class="word-area">
+        <div id="word-rack" class="word-rack" data-testid="word-rack" aria-label="Your word"></div>
+        <p id="word-hint" class="word-hint" data-testid="word-hint" aria-live="polite"></p>
+      </div>
       <div id="tile-tray" class="tile-tray" data-testid="tile-tray"></div>
       <div class="play-actions">
         <button type="button" id="btn-clear" class="pill-btn" data-testid="clear">Clear</button>

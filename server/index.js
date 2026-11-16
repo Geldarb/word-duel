@@ -142,6 +142,12 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb({ ok: true });
   });
 
+  socket.on('checkWord', (payload = {}, cb) => {
+    const result = manager.checkWord(socket.id, payload.word);
+    if (result?.error) return ackError(cb, result.error);
+    if (typeof cb === 'function') cb({ ok: true, word: result.word, valid: !!result.valid });
+  });
+
   socket.on('react', (payload = {}, cb) => {
     const result = manager.react(socket.id, payload.emoji);
     if (result?.error) return ackError(cb, result.error);

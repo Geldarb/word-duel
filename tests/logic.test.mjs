@@ -14,6 +14,8 @@ import {
   activePlayerId,
   LETTER_VALUES,
   VOWELS,
+  RoomManager,
+  CHECK_WORD_MIN_INTERVAL_MS,
 } from '../server/game.js';
 
 describe('dictionary', () => {
@@ -106,5 +108,77 @@ describe('helpers', () => {
   it('treats Y as a consonant for the vowel guarantee', () => {
     assert.ok(VOWELS.includes('A'));
     assert.equal(VOWELS.includes('Y'), false);
+  });
+});
+
+describe('checkWord', () => {
+  let now;
+  let manager;
+  let room;
+
+  function playState() {
+    now = 10_000;
+    manager = new RoomManager({ now: () => now, turnSeconds: 60, onEmit() {} });
+    const created = manager.createRoom({ name: 'Ada', socketId: 's1' });
+    room = created.room;
+    manager.joinRoom({ code: room.code, name: 'Bea', socketId: 's2' });
+    manager._clearTimers(room.code);
+    room.status = 'playing';
+    room.firstPlayerId = 'p1';
+    room.turnIndex = 0;
+    room.current = {
+      playerId: 'p1',
+      letters: ['C', 'O', 'L', 'O', 'U', 'R', 'S'],
+      turnNumber: 1,
+      startedAt: now,
+      endsAt: now + 60_000,
+      remainingMs: 60_000,
+      paused: false,
+      submitted: false,
+    };
+  }
+
+  before(() => {
+    loadDictionary();
+  });
+
+  it('returns true for a dictionary word the active player can form', () => {
+    playState();
+    const result = manager.checkWord('s1', 'colour');
+    assert.equal(result.ok, true);
+    assert.equal(result.word, 'COLOUR');
+    assert.equal(result.valid, true);
+  });
+
+  it('returns false for a non-word, a one-letter string, or letters not on the rack', () => {
+    playState();
+    assert.equal(manager.checkWord('s1', 'xqzqy').valid, false);
+    now += CHECK_WORD_MIN_INTERVAL_MS;
+    assert.equal(manager.checkWord('s1', 'C').valid, false);
+    now += CHECK_WORD_MIN_INTERVAL_MS;
+    assert.equal(manager.checkWord('s1', 'ZEBRA').valid, false);
+  });
+
+  it('rejects anyone who is not the active player in a live turn', () => {
+    playState();
+    const opp = manager.checkWord('s2', 'COLOUR');
+    assert.equal(opp.error, 'It is not your turn.');
+    const stranger = manager.checkWord('s9', 'COLOUR');
+    assert.equal(stranger.error, 'You are not in a match.');
+    room.current.paused = true;
+    now += CHECK_WORD_MIN_INTERVAL_MS;
+    const paused = manager.checkWord('s1', 'COLOUR');
+    assert.equal(paused.error, 'It is not time to play a word.');
+  });
+
+  it('rate-limits repeated checks from the same player', () => {
+    playState();
+    const first = manager.checkWord('s1', 'COLOUR');
+    assert.equal(first.valid, true);
+    const rapid = manager.checkWord('s1', 'COLOURS');
+    assert.equal(rapid.error, 'slow-down');
+    now += CHECK_WORD_MIN_INTERVAL_MS;
+    const later = manager.checkWord('s1', 'COLOURS');
+    assert.equal(later.valid, true);
   });
 });

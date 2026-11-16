@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { isValidWord } from './dictionary.js';
 
-export const VERSION = 'v0.1';
+export const VERSION = 'v0.2';
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
 export const MIN_WORD_LEN = 2;
@@ -10,6 +10,7 @@ export const DEFAULT_TURN_SECONDS = 60;
 export const INTERMISSION_MS = 2800;
 export const ROOM_TTL_MS = 15 * 60 * 1000;
 export const REACTION_MIN_INTERVAL_MS = 900;
+export const CHECK_WORD_MIN_INTERVAL_MS = 150;
 
 export const LETTER_VALUES = Object.freeze({
   A: 1, E: 1, I: 1, O: 1, N: 1, R: 1, S: 1, T: 1,
@@ -274,6 +275,26 @@ export class RoomManager {
     return { ok: true };
   }
 
+  checkWord(socketId, word) {
+    const found = this._findBySocket(socketId);
+    if (!found) return { error: 'You are not in a match.' };
+    const { room, player } = found;
+    if (room.status !== 'playing' || !room.current || room.current.paused || room.current.submitted) {
+      return { error: 'It is not time to play a word.' };
+    }
+    if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
+    const now = this.now();
+    if (now - (player.lastCheckAt || 0) < CHECK_WORD_MIN_INTERVAL_MS) {
+      return { error: 'slow-down' };
+    }
+    player.lastCheckAt = now;
+    const cleaned = sanitiseWord(word);
+    if (cleaned.length < MIN_WORD_LEN || !canForm(cleaned, room.current.letters)) {
+      return { ok: true, word: cleaned, valid: false };
+    }
+    return { ok: true, word: cleaned, valid: isValidWord(cleaned) };
+  }
+
   react(socketId, emoji) {
     const found = this._findBySocket(socketId);
     if (!found) return { error: 'You are not in a match.' };
@@ -356,6 +377,7 @@ export class RoomManager {
       score: 0,
       history: [],
       lastReactionAt: 0,
+      lastCheckAt: 0,
     };
   }
 

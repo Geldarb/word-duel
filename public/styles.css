@@ -401,6 +401,13 @@ h1 {
   font-weight: 700;
 }
 
+.word-area {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
 .word-rack {
   min-height: 68px;
   background: rgba(255, 253, 251, 0.45);
@@ -412,7 +419,17 @@ h1 {
   gap: 6px;
   padding: 8px;
   flex-shrink: 0;
-  margin-bottom: 8px;
+}
+
+.word-hint {
+  min-height: 1.25em;
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--good);
+  letter-spacing: 0.02em;
 }
 
 .word-rack.empty::after {
@@ -683,7 +700,9 @@ h1 {
   .tagline { margin-bottom: 4px; display: none; }
   .home-form { gap: 6px; }
   .field input, .big-btn { height: 42px; }
-  .word-rack { min-height: 52px; margin-bottom: 4px; }
+  .word-area { margin-bottom: 4px; }
+  .word-rack { min-height: 52px; }
+  .word-hint { font-size: 0.8rem; min-height: 1.15em; margin-top: 2px; }
   .tile { width: 46px; height: 50px; font-size: 1.25rem; border-radius: 10px; }
   .play-actions { margin-bottom: 4px; }
   .pill-btn, .emoji-btn { height: 38px; }
@@ -718,7 +737,8 @@ h1 {
   #screen-play.hidden { display: none !important; }
   #screen-play .top-bar { grid-area: bar; }
   #screen-play .turn-meta { grid-area: meta; flex-direction: column; align-items: flex-start; margin: 0; }
-  #screen-play .word-rack { grid-area: rack; margin: 0; max-height: 64px; align-self: center; width: 100%; }
+  #screen-play .word-area { grid-area: rack; margin: 0; align-self: center; width: 100%; }
+  #screen-play .word-rack { margin: 0; max-height: 64px; }
   #screen-play .tile-tray { grid-area: tray; margin: 0; align-content: center; align-self: center; }
   #screen-play .play-actions { grid-area: actions; margin: 0; }
   #screen-play .emoji-bar { grid-area: emoji; }
