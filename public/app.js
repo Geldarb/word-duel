@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.2';
+  const VERSION = 'v0.3';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
@@ -37,6 +37,8 @@
     turnCount: $('#turn-count'),
     rack: $('#word-rack'),
     wordHint: $('#word-hint'),
+    funMode: $('#fun-mode'),
+    resultSlang: $('#result-slang'),
     tray: $('#tile-tray'),
     clear: $('#btn-clear'),
     shuffle: $('#btn-shuffle'),
@@ -80,6 +82,7 @@
   let checkSeq = 0;
   let lastCheckedWord = '';
   let lastCheckValid = false;
+  let lastCheckSlang = false;
 
 
   const socket = io({
@@ -178,15 +181,21 @@
     }
   }
 
+  function setFunBadges(on) {
+    $$('[data-fun-badge]').forEach((el) => { el.hidden = !on; });
+  }
+
   function renderState() {
     if (!state) {
       showScreen('home');
       els.disconnect.hidden = true;
+      setFunBadges(false);
       return;
     }
     showScreen(screenFor(state.status));
     const oppGone = !!(state.opponent && !state.opponent.connected);
     els.disconnect.hidden = !oppGone;
+    setFunBadges(!!state.funMode);
 
     if (state.status === 'lobby') renderLobby();
     if (state.status === 'coin') renderCoin();
@@ -318,8 +327,9 @@
     return !!(state?.current?.yours && state.status === 'playing' && !state.current.paused);
   }
 
-  function setWordHint(valid) {
-    els.wordHint.textContent = valid ? '✓ word!' : '';
+  function setWordHint(valid, slang) {
+    if (!valid) els.wordHint.textContent = '';
+    else els.wordHint.textContent = slang ? '✓ slang!' : '✓ word!';
   }
 
   function scheduleWordCheck() {
@@ -330,11 +340,13 @@
       checkSeq += 1;
       lastCheckedWord = '';
       lastCheckValid = false;
+      lastCheckSlang = false;
+      lastCheckSlang = false;
       setWordHint(false);
       return;
     }
     if (word === lastCheckedWord) {
-      setWordHint(lastCheckValid);
+      setWordHint(lastCheckValid, lastCheckSlang);
       return;
     }
     setWordHint(false);
@@ -348,7 +360,8 @@
         if (!res?.ok || res.word !== current) return;
         lastCheckedWord = current;
         lastCheckValid = !!res.valid;
-        setWordHint(lastCheckValid);
+        lastCheckSlang = !!res.slang;
+        setWordHint(lastCheckValid, lastCheckSlang);
       });
     }, 200);
   }
@@ -385,6 +398,8 @@
     els.resultOppScore.textContent = String(opp?.score ?? 0);
     if (!r) return;
     const whose = r.playerId === you?.id ? 'You' : (r.playerName || 'Opponent');
+    const slangHit = !!(r.slang || r.reason === 'slang');
+    els.resultSlang.hidden = !slangHit;
     if (r.reason === 'timeout') {
       els.resultLabel.textContent = `${whose} — time up`;
       els.resultWord.textContent = 'Time up';
@@ -415,6 +430,8 @@
       } else if (!entry.valid) {
         const shown = entry.word ? entry.word : 'Invalid';
         li.innerHTML = `<span class="miss">${shown}</span><span>0</span>`;
+      } else if (entry.slang || entry.reason === 'slang') {
+        li.innerHTML = `<span>${entry.word}</span><span>${entry.score} <em class="slang-tag">slang +2</em></span>`;
       } else {
         li.innerHTML = `<span>${entry.word}</span><span>${entry.score}</span>`;
       }
@@ -457,7 +474,9 @@
     checkSeq += 1;
     lastCheckedWord = '';
     lastCheckValid = false;
+    lastCheckSlang = false;
     setWordHint(false);
+    setFunBadges(false);
     if (clearSession) rememberToken('');
     showScreen('home');
     els.disconnect.hidden = true;
@@ -491,7 +510,7 @@
 
   els.create.addEventListener('click', () => {
     saveName();
-    socket.emit('createRoom', { name: displayName(), token }, (res) => {
+    socket.emit('createRoom', { name: displayName(), token, funMode: !!els.funMode.checked }, (res) => {
       handleAck(res, 'Could not create a room.');
     });
   });

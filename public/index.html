@@ -13,7 +13,7 @@
   <link rel="icon" href="/icons/icon-192.png">
   <title>Word Duel</title>
   <link rel="stylesheet" href="/styles.css">
-  <!-- WD-v0.2 -->
+  <!-- WD-v0.3 -->
 </head>
 <body>
   <div id="app">
@@ -32,13 +32,18 @@
           <span class="mini-tile tilt-right">D<sub>2</sub></span>
         </div>
         <h1>Word Duel</h1>
-        <p class="version" data-testid="version">v0.2</p>
+        <p class="version" data-testid="version">v0.3</p>
         <p class="tagline">A cosy word match for two.</p>
       </div>
       <form id="home-form" class="home-form" autocomplete="off">
         <label class="field">
           <span>Your name</span>
           <input id="name-input" data-testid="name-input" type="text" maxlength="16" placeholder="Name" enterkeyhint="done" autocapitalize="words" autocomplete="nickname">
+        </label>
+        <label class="fun-toggle">
+          <input id="fun-mode" data-testid="fun-mode" type="checkbox">
+          <span class="fun-switch" aria-hidden="true"></span>
+          <span>Fun mode</span>
         </label>
         <button type="button" id="btn-create" class="big-btn" data-testid="create">Create room</button>
         <p class="or">or join with a code</p>
@@ -63,6 +68,7 @@
         <p class="soft-label">Room code</p>
         <div id="lobby-code" class="room-code" data-testid="room-code">————</div>
         <p class="hint">Read this out to your opponent.</p>
+        <p class="fun-badge" data-fun-badge data-testid="fun-badge-lobby" hidden>Fun mode</p>
         <div id="lobby-players" class="lobby-players" data-testid="lobby-players"></div>
         <p id="lobby-status" class="status-line" data-testid="lobby-status">Waiting for your opponent…</p>
       </div>
@@ -102,6 +108,7 @@
         <div id="timer" class="timer" data-testid="timer"><span id="timer-num">60</span></div>
         <p id="turn-status" class="turn-status" data-testid="turn-status">Your turn</p>
         <p id="turn-count" class="turn-count" data-testid="turn-count">Turn 1 of 12</p>
+        <p class="fun-badge" data-fun-badge data-testid="fun-badge-play" hidden>Fun mode</p>
       </div>
       <div class="word-area">
         <div id="word-rack" class="word-rack" data-testid="word-rack" aria-label="Your word"></div>
@@ -125,6 +132,7 @@
       <div class="result-body">
         <p id="result-label" class="result-label" data-testid="result-label"></p>
         <p id="result-word" class="result-word" data-testid="result-word"></p>
+        <p id="result-slang" class="slang-note" data-testid="result-slang" hidden>slang +2</p>
         <p id="result-score" class="result-score" data-testid="result-score"></p>
         <div class="scoreboard tall" data-testid="result-scores">
           <div class="score-chip you">
@@ -147,6 +155,7 @@
       </div>
       <div class="end-scroll" data-testid="end-scroll">
         <p id="end-title" class="end-title" data-testid="end-title"></p>
+        <p class="fun-badge" data-fun-badge data-testid="fun-badge-end" hidden>Fun mode</p>
         <div class="scoreboard tall">
           <div class="score-chip you">
             <span class="score-name" id="end-you-name">You</span>

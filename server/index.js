@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { loadDictionary, dictionarySize } from './dictionary.js';
+import { loadDictionary, loadSlang, dictionarySize, slangSize } from './dictionary.js';
 import { RoomManager, VERSION, EMOJIS, DEFAULT_TURN_SECONDS } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,7 +11,8 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const PORT = Number(process.env.PORT) || 3000;
 
 const wordCount = loadDictionary();
-console.log(`Word Duel ${VERSION} loaded ${wordCount} words`);
+const slangCount = loadSlang();
+console.log(`Word Duel ${VERSION} loaded ${wordCount} words, ${slangCount} slang`);
 
 const app = express();
 const httpServer = createServer(app);
@@ -79,6 +80,7 @@ io.on('connection', (socket) => {
         token: payload.token,
         testSecret: payload.testSecret,
         turnSeconds: payload.turnSeconds,
+        funMode: payload.funMode,
         socketId: socket.id,
       });
       if (typeof cb === 'function') {
@@ -145,7 +147,7 @@ io.on('connection', (socket) => {
   socket.on('checkWord', (payload = {}, cb) => {
     const result = manager.checkWord(socket.id, payload.word);
     if (result?.error) return ackError(cb, result.error);
-    if (typeof cb === 'function') cb({ ok: true, word: result.word, valid: !!result.valid });
+    if (typeof cb === 'function') cb({ ok: true, word: result.word, valid: !!result.valid, slang: !!result.slang });
   });
 
   socket.on('react', (payload = {}, cb) => {
@@ -180,5 +182,5 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Word Duel ${VERSION} listening on ${PORT} (${dictionarySize()} words)`);
+  console.log(`Word Duel ${VERSION} listening on ${PORT} (${dictionarySize()} words, ${slangSize()} slang)`);
 });

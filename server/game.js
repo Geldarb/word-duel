@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
-import { isValidWord } from './dictionary.js';
+import { isValidWord, isSlangWord } from './dictionary.js';
 
-export const VERSION = 'v0.2';
+export const VERSION = 'v0.3';
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
 export const MIN_WORD_LEN = 2;
@@ -11,6 +11,7 @@ export const INTERMISSION_MS = 2800;
 export const ROOM_TTL_MS = 15 * 60 * 1000;
 export const REACTION_MIN_INTERVAL_MS = 900;
 export const CHECK_WORD_MIN_INTERVAL_MS = 150;
+export const SLANG_BONUS = 2;
 
 export const LETTER_VALUES = Object.freeze({
   A: 1, E: 1, I: 1, O: 1, N: 1, R: 1, S: 1, T: 1,
@@ -109,18 +110,21 @@ export function sanitiseWord(word) {
   return String(word || '').toUpperCase().replace(/[^A-Z]/g, '');
 }
 
-export function judgeWord(word, letters) {
+export function judgeWord(word, letters, { funMode = false } = {}) {
   const cleaned = sanitiseWord(word);
   if (cleaned.length < MIN_WORD_LEN) {
-    return { valid: false, word: cleaned, score: 0, reason: 'invalid' };
+    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
   }
   if (!canForm(cleaned, letters)) {
-    return { valid: false, word: cleaned, score: 0, reason: 'invalid' };
+    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
   }
-  if (!isValidWord(cleaned)) {
-    return { valid: false, word: cleaned, score: 0, reason: 'invalid' };
+  if (isValidWord(cleaned)) {
+    return { valid: true, word: cleaned, score: scoreWord(cleaned), reason: 'ok', slang: false };
   }
-  return { valid: true, word: cleaned, score: scoreWord(cleaned), reason: 'ok' };
+  if (funMode && isSlangWord(cleaned)) {
+    return { valid: true, word: cleaned, score: scoreWord(cleaned) + SLANG_BONUS, reason: 'slang', slang: true };
+  }
+  return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
 }
 
 export function flipCoin() {
@@ -167,7 +171,7 @@ export class RoomManager {
     this.onEmit(room);
   }
 
-  createRoom({ name, token, testSecret, turnSeconds, socketId } = {}) {
+  createRoom({ name, token, testSecret, turnSeconds, socketId, funMode } = {}) {
     if (token) this.leaveByToken(token);
     const existing = new Set(this.rooms.keys());
     const code = generateCode(existing);
@@ -183,6 +187,7 @@ export class RoomManager {
       current: null,
       lastResult: null,
       rematch: { p1: false, p2: false },
+      funMode: !!funMode,
       players: { p1: player, p2: null },
       createdAt: this.now(),
     };
@@ -270,7 +275,7 @@ export class RoomManager {
     if (room.current.paused) return { error: 'Waiting for your opponent to return.' };
     if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
     if (room.current.submitted) return { error: 'You have already played this turn.' };
-    const judged = judgeWord(word, room.current.letters);
+    const judged = judgeWord(word, room.current.letters, { funMode: !!room.funMode });
     this._finishTurn(room, judged);
     return { ok: true };
   }
@@ -290,9 +295,13 @@ export class RoomManager {
     player.lastCheckAt = now;
     const cleaned = sanitiseWord(word);
     if (cleaned.length < MIN_WORD_LEN || !canForm(cleaned, room.current.letters)) {
-      return { ok: true, word: cleaned, valid: false };
+      return { ok: true, word: cleaned, valid: false, slang: false };
     }
-    return { ok: true, word: cleaned, valid: isValidWord(cleaned) };
+    if (isValidWord(cleaned)) {
+      return { ok: true, word: cleaned, valid: true, slang: false };
+    }
+    const slangOnly = !!room.funMode && isSlangWord(cleaned);
+    return { ok: true, word: cleaned, valid: slangOnly, slang: slangOnly };
   }
 
   react(socketId, emoji) {
@@ -352,6 +361,7 @@ export class RoomManager {
       opponent: opponent ? this._publicPlayer(opponent, false) : null,
       current,
       lastResult: room.lastResult,
+      funMode: !!room.funMode,
       rematch: {
         you: !!(you && room.rematch[you.id]),
         opponent: !!(opponent && room.rematch[opponent.id]),
@@ -498,6 +508,7 @@ export class RoomManager {
       score: judged.score,
       valid: judged.valid,
       reason: judged.reason,
+      slang: !!judged.slang,
       turnNumber: room.current.turnNumber,
     };
     player.history.push(entry);

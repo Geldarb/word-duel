@@ -1,6 +1,6 @@
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadDictionary, isValidWord } from '../server/dictionary.js';
+import { loadDictionary, loadSlang, isValidWord, isSlangWord, slangSize } from '../server/dictionary.js';
 import {
   generateCode,
   generateScramble,
@@ -16,6 +16,7 @@ import {
   VOWELS,
   RoomManager,
   CHECK_WORD_MIN_INTERVAL_MS,
+  SLANG_BONUS,
 } from '../server/game.js';
 
 describe('dictionary', () => {
@@ -180,5 +181,109 @@ describe('checkWord', () => {
     now += CHECK_WORD_MIN_INTERVAL_MS;
     const later = manager.checkWord('s1', 'COLOURS');
     assert.equal(later.valid, true);
+  });
+});
+
+describe('fun mode slang', () => {
+  const rack = ['R', 'I', 'Z', 'Z', 'Y', 'E', 'T'];
+
+  before(() => {
+    loadDictionary();
+    const n = loadSlang();
+    assert.ok(n >= 300, `slang list should have several hundred entries, got ${n}`);
+  });
+
+  it('loads a letters-only slang list of 2 to 7 characters', () => {
+    assert.equal(isSlangWord('rizz'), true);
+    assert.equal(isSlangWord('yeet'), true);
+    assert.equal(isSlangWord('peng'), true);
+    assert.equal(isSlangWord(''), false);
+    assert.equal(isSlangWord('xqzqy'), false);
+    assert.ok(slangSize() >= 300);
+  });
+
+  it('gives slang-only words their letter score plus two in Fun mode', () => {
+    assert.equal(isValidWord('rizz'), false);
+    const judged = judgeWord('rizz', rack, { funMode: true });
+    assert.equal(judged.valid, true);
+    assert.equal(judged.reason, 'slang');
+    assert.equal(judged.slang, true);
+    assert.equal(judged.word, 'RIZZ');
+    assert.equal(judged.score, scoreWord('RIZZ') + SLANG_BONUS);
+    assert.equal(SLANG_BONUS, 2);
+  });
+
+  it('rejects slang-only words in normal mode', () => {
+    const judged = judgeWord('rizz', rack);
+    assert.equal(judged.valid, false);
+    assert.equal(judged.score, 0);
+    assert.equal(judged.reason, 'invalid');
+    assert.equal(judged.slang, false);
+  });
+
+  it('does not add a bonus when the slang is already in the main dictionary', () => {
+    const litRack = ['L', 'I', 'T', 'A', 'E', 'R', 'S'];
+    assert.equal(isValidWord('lit'), true);
+    assert.equal(isSlangWord('lit'), true);
+    const judged = judgeWord('lit', litRack, { funMode: true });
+    assert.equal(judged.valid, true);
+    assert.equal(judged.reason, 'ok');
+    assert.equal(judged.slang, false);
+    assert.equal(judged.score, scoreWord('LIT'));
+  });
+
+  it('accepts slang checks only in a Fun mode room', () => {
+    let now = 20_000;
+    const manager = new RoomManager({ now: () => now, turnSeconds: 60, onEmit() {} });
+    const created = manager.createRoom({ name: 'Ada', socketId: 's1', funMode: true });
+    const room = created.room;
+    assert.equal(room.funMode, true);
+    manager.joinRoom({ code: room.code, name: 'Bea', socketId: 's2' });
+    manager._clearTimers(room.code);
+    room.status = 'playing';
+    room.firstPlayerId = 'p1';
+    room.current = {
+      playerId: 'p1',
+      letters: rack,
+      turnNumber: 1,
+      startedAt: now,
+      endsAt: now + 60_000,
+      remainingMs: 60_000,
+      paused: false,
+      submitted: false,
+    };
+    const fun = manager.checkWord('s1', 'RIZZ');
+    assert.equal(fun.valid, true);
+    assert.equal(fun.slang, true);
+    const played = manager.submitWord('s1', 'RIZZ');
+    assert.equal(played.ok, true);
+    assert.equal(room.lastResult.reason, 'slang');
+    assert.equal(room.lastResult.slang, true);
+    assert.equal(room.lastResult.score, scoreWord('RIZZ') + SLANG_BONUS);
+
+    const plain = new RoomManager({ now: () => 30_000, turnSeconds: 60, onEmit() {} });
+    const normal = plain.createRoom({ name: 'Ada', socketId: 'n1' });
+    plain.joinRoom({ code: normal.room.code, name: 'Bea', socketId: 'n2' });
+    plain._clearTimers(normal.room.code);
+    normal.room.status = 'playing';
+    normal.room.firstPlayerId = 'p1';
+    normal.room.current = {
+      playerId: 'p1',
+      letters: rack,
+      turnNumber: 1,
+      startedAt: 30_000,
+      endsAt: 90_000,
+      remainingMs: 60_000,
+      paused: false,
+      submitted: false,
+    };
+    const rejected = plain.checkWord('n1', 'RIZZ');
+    assert.equal(rejected.valid, false);
+    assert.equal(rejected.slang, false);
+    plain.submitWord('n1', 'RIZZ');
+    assert.equal(normal.room.lastResult.valid, false);
+    assert.equal(normal.room.lastResult.score, 0);
+    manager._clearTimers(room.code);
+    plain._clearTimers(normal.room.code);
   });
 });

@@ -1,4 +1,4 @@
-const VERSION = 'WD-v0.2';
+const VERSION = 'WD-v0.3';
 const CACHE = 'word-duel-' + VERSION;
 const ASSETS = [
   '/',
