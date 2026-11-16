@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#F7A8B8">
+  <meta name="description" content="Word Duel — a cosy 1v1 word game for two phones.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" href="/icons/icon-192.png">
+  <title>Word Duel</title>
+  <link rel="stylesheet" href="/styles.css">
+  <!-- WD-v0.1 -->
+</head>
+<body>
+  <div id="app">
+    <button id="update-banner" class="update-banner" hidden data-testid="update-banner" type="button">
+      Update available — tap to reload
+    </button>
+
+    <section id="screen-home" class="screen" data-testid="screen-home">
+      <div class="top-bar">
+        <span class="top-spacer"></span>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="home-hero">
+        <div class="logo-tiles" aria-hidden="true">
+          <span class="mini-tile tilt-left">W<sub>4</sub></span>
+          <span class="mini-tile tilt-right">D<sub>2</sub></span>
+        </div>
+        <h1>Word Duel</h1>
+        <p class="version" data-testid="version">v0.1</p>
+        <p class="tagline">A cosy word match for two.</p>
+      </div>
+      <form id="home-form" class="home-form" autocomplete="off">
+        <label class="field">
+          <span>Your name</span>
+          <input id="name-input" data-testid="name-input" type="text" maxlength="16" placeholder="Name" enterkeyhint="done" autocapitalize="words" autocomplete="nickname">
+        </label>
+        <button type="button" id="btn-create" class="big-btn" data-testid="create">Create room</button>
+        <p class="or">or join with a code</p>
+        <div class="join-row">
+          <label class="field code-field">
+            <span>Room code</span>
+            <input id="code-input" data-testid="code-input" type="text" maxlength="6" placeholder="ABCD" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go">
+          </label>
+          <button type="button" id="btn-join" class="big-btn join-btn" data-testid="join">Join</button>
+        </div>
+        <p id="home-error" class="error-text" data-testid="home-error" role="status" hidden></p>
+      </form>
+    </section>
+
+    <section id="screen-lobby" class="screen hidden" data-testid="screen-lobby">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="lobby-back">←</button>
+        <h2>Lobby</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="lobby-body">
+        <p class="soft-label">Room code</p>
+        <div id="lobby-code" class="room-code" data-testid="room-code">————</div>
+        <p class="hint">Read this out to your opponent.</p>
+        <div id="lobby-players" class="lobby-players" data-testid="lobby-players"></div>
+        <p id="lobby-status" class="status-line" data-testid="lobby-status">Waiting for your opponent…</p>
+      </div>
+    </section>
+
+    <section id="screen-coin" class="screen hidden" data-testid="screen-coin">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="coin-back">←</button>
+        <h2>Who goes first?</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="coin-body">
+        <div id="coin" class="coin" data-testid="coin" aria-hidden="true">
+          <div class="coin-face heads">♡</div>
+          <div class="coin-face tails">✦</div>
+        </div>
+        <p id="coin-result" class="coin-result" data-testid="coin-result">Flipping a coin…</p>
+      </div>
+    </section>
+
+    <section id="screen-play" class="screen hidden" data-testid="screen-play">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="play-back">←</button>
+        <div class="scoreboard" data-testid="scoreboard">
+          <div class="score-chip you">
+            <span class="score-name" id="you-name">You</span>
+            <span class="score-num" id="you-score" data-testid="you-score">0</span>
+          </div>
+          <div class="score-chip them">
+            <span class="score-num" id="opp-score" data-testid="opp-score">0</span>
+            <span class="score-name" id="opp-name">Opponent</span>
+          </div>
+        </div>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="turn-meta">
+        <div id="timer" class="timer" data-testid="timer"><span id="timer-num">60</span></div>
+        <p id="turn-status" class="turn-status" data-testid="turn-status">Your turn</p>
+        <p id="turn-count" class="turn-count" data-testid="turn-count">Turn 1 of 12</p>
+      </div>
+      <div id="word-rack" class="word-rack" data-testid="word-rack" aria-label="Your word"></div>
+      <div id="tile-tray" class="tile-tray" data-testid="tile-tray"></div>
+      <div class="play-actions">
+        <button type="button" id="btn-clear" class="pill-btn" data-testid="clear">Clear</button>
+        <button type="button" id="btn-shuffle" class="pill-btn" data-testid="shuffle">Shuffle</button>
+        <button type="button" id="btn-submit" class="pill-btn primary" data-testid="submit">Submit</button>
+      </div>
+      <div id="emoji-bar" class="emoji-bar" data-testid="emoji-bar" role="group" aria-label="Reactions"></div>
+    </section>
+
+    <section id="screen-result" class="screen hidden" data-testid="screen-result">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back">←</button>
+        <h2>Turn over</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="result-body">
+        <p id="result-label" class="result-label" data-testid="result-label"></p>
+        <p id="result-word" class="result-word" data-testid="result-word"></p>
+        <p id="result-score" class="result-score" data-testid="result-score"></p>
+        <div class="scoreboard tall" data-testid="result-scores">
+          <div class="score-chip you">
+            <span class="score-name" id="result-you-name">You</span>
+            <span class="score-num" id="result-you-score">0</span>
+          </div>
+          <div class="score-chip them">
+            <span class="score-num" id="result-opp-score">0</span>
+            <span class="score-name" id="result-opp-name">Opponent</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-end" class="screen hidden" data-testid="screen-end">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="end-back">←</button>
+        <h2>Match over</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="end-scroll" data-testid="end-scroll">
+        <p id="end-title" class="end-title" data-testid="end-title"></p>
+        <div class="scoreboard tall">
+          <div class="score-chip you">
+            <span class="score-name" id="end-you-name">You</span>
+            <span class="score-num" id="end-you-score" data-testid="end-you-score">0</span>
+          </div>
+          <div class="score-chip them">
+            <span class="score-num" id="end-opp-score" data-testid="end-opp-score">0</span>
+            <span class="score-name" id="end-opp-name">Opponent</span>
+          </div>
+        </div>
+        <div class="history-grid">
+          <div>
+            <h3 id="hist-you-title">You</h3>
+            <ol id="hist-you" class="word-list" data-testid="hist-you"></ol>
+          </div>
+          <div>
+            <h3 id="hist-opp-title">Opponent</h3>
+            <ol id="hist-opp" class="word-list" data-testid="hist-opp"></ol>
+          </div>
+        </div>
+      </div>
+      <div class="end-actions">
+        <button type="button" id="btn-rematch" class="big-btn" data-testid="rematch">Rematch</button>
+        <p id="rematch-status" class="status-line" data-testid="rematch-status" hidden></p>
+        <div id="end-emoji-bar" class="emoji-bar" role="group" aria-label="Reactions"></div>
+      </div>
+    </section>
+
+    <div id="disconnect-banner" class="banner" hidden data-testid="disconnect-banner">
+      Opponent disconnected. Waiting for them to return…
+    </div>
+    <div id="reactions" class="reactions" aria-hidden="true"></div>
+    <div id="modal" class="modal hidden" data-testid="leave-modal">
+      <div class="modal-card">
+        <p>Leave this match?</p>
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel" class="pill-btn">Stay</button>
+          <button type="button" id="modal-leave" class="pill-btn danger" data-testid="confirm-leave">Leave</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

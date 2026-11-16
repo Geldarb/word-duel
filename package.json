@@ -1,0 +1,25 @@
+{
+  "name": "word-duel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A cosy real-time 1v1 turn-based word game for two phones.",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test tests/logic.test.mjs",
+    "test:live": "node tests/live-match.mjs",
+    "screenshots": "node tests/screenshots.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1",
+    "socket.io-client": "^4.8.1"
+  }
+}
