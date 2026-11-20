@@ -1,7 +1,23 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { isValidWord, isSlangWord } from './dictionary.js';
+import {
+  generateStory,
+  resolveStoryLength,
+  sanitiseAnswers,
+  answersComplete,
+  autoFillAnswers,
+  renderLine,
+  renderStoryText,
+  voteLineIndexes,
+  answersForLine,
+  preambleLines,
+  VERSION_KEYS,
+  VERSION_LABELS,
+  STORY_FILL_SECONDS,
+  VOTE_REVEAL_MS,
+} from './story.js';
 
-export const VERSION = 'v0.3.1';
+export const VERSION = 'v0.4';
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
 export const MIN_WORD_LEN = 2;
@@ -12,6 +28,8 @@ export const ROOM_TTL_MS = 15 * 60 * 1000;
 export const REACTION_MIN_INTERVAL_MS = 900;
 export const CHECK_WORD_MIN_INTERVAL_MS = 150;
 export const SLANG_BONUS = 2;
+export const DW_CHANCE = 0.28;
+export { STORY_FILL_SECONDS, VOTE_REVEAL_MS };
 
 export const LETTER_VALUES = Object.freeze({
   A: 1, E: 1, I: 1, O: 1, N: 1, R: 1, S: 1, T: 1,
@@ -97,6 +115,87 @@ export function scoreWord(word) {
   return total;
 }
 
+export function assignBonus(letterCount = LETTER_COUNT, rng = Math.random) {
+  const type = rng() < DW_CHANCE ? 'DW' : 'DL';
+  const index = Math.min(letterCount - 1, Math.max(0, Math.floor(rng() * letterCount)));
+  return { type, index };
+}
+
+export function resolveUsedIndexes(word, letters, usedIndexes) {
+  const cleaned = sanitiseWord(word);
+  if (Array.isArray(usedIndexes) && usedIndexes.length === cleaned.length) {
+    const nums = usedIndexes.map((n) => Number(n));
+    if (new Set(nums).size !== nums.length) return null;
+    const picked = [];
+    for (const i of nums) {
+      if (!Number.isInteger(i) || i < 0 || i >= letters.length) return null;
+      picked.push(letters[i]);
+    }
+    if (picked.join('') === cleaned) return nums;
+    return null;
+  }
+  return null;
+}
+
+export function mustHaveUsedBonus(word, letters, bonus) {
+  if (!bonus || bonus.index == null) return false;
+  const letter = letters[bonus.index];
+  if (!letter) return false;
+  const cleaned = sanitiseWord(word);
+  const need = [...cleaned].filter((ch) => ch === letter).length;
+  const have = letters.filter((ch) => ch === letter).length;
+  return need > 0 && need === have;
+}
+
+export function bonusApplies(word, letters, bonus, usedIndexes) {
+  if (!bonus) return false;
+  const resolved = resolveUsedIndexes(word, letters, usedIndexes);
+  if (resolved) return resolved.includes(bonus.index);
+  return mustHaveUsedBonus(word, letters, bonus);
+}
+
+export function scoreWordWithBonus(word, letters, bonus, usedIndexes, { funMode = false } = {}) {
+  const cleaned = sanitiseWord(word);
+  const applied = bonusApplies(cleaned, letters, bonus, usedIndexes);
+  const letterParts = [];
+  let subtotal = 0;
+  const resolved = resolveUsedIndexes(cleaned, letters, usedIndexes);
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    const base = LETTER_VALUES[ch] || 0;
+    const tileIndex = resolved ? resolved[i] : null;
+    const isDl = !!(applied && bonus?.type === 'DL' && (
+      (tileIndex != null && tileIndex === bonus.index)
+      || (tileIndex == null && ch === letters[bonus.index] && !letterParts.some((p) => p.doubled))
+    ));
+    const value = isDl ? base * 2 : base;
+    letterParts.push({ letter: ch, value: base, scored: value, doubled: isDl });
+    subtotal += value;
+  }
+  const wordMultiplier = applied && bonus?.type === 'DW' ? 2 : 1;
+  let total = subtotal * wordMultiplier;
+  let slang = false;
+  if (funMode && isSlangWord(cleaned) && !isValidWord(cleaned)) {
+    total += SLANG_BONUS;
+    slang = true;
+  }
+  return {
+    word: cleaned,
+    score: total,
+    applied,
+    slang,
+    breakdown: {
+      letters: letterParts,
+      subtotal,
+      wordMultiplier,
+      slangBonus: slang ? SLANG_BONUS : 0,
+      bonusType: applied ? bonus.type : null,
+      bonusLetter: applied ? letters[bonus.index] : null,
+      total,
+    },
+  };
+}
+
 export function sanitiseName(name) {
   const cleaned = String(name || '')
     .replace(/[\u0000-\u001F\u007F]/g, '')
@@ -110,21 +209,28 @@ export function sanitiseWord(word) {
   return String(word || '').toUpperCase().replace(/[^A-Z]/g, '');
 }
 
-export function judgeWord(word, letters, { funMode = false } = {}) {
+export function judgeWord(word, letters, { funMode = false, bonus = null, usedIndexes = null } = {}) {
   const cleaned = sanitiseWord(word);
   if (cleaned.length < MIN_WORD_LEN) {
-    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
+    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false, breakdown: null, bonusApplied: false };
   }
   if (!canForm(cleaned, letters)) {
-    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
+    return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false, breakdown: null, bonusApplied: false };
   }
-  if (isValidWord(cleaned)) {
-    return { valid: true, word: cleaned, score: scoreWord(cleaned), reason: 'ok', slang: false };
+  if (isValidWord(cleaned) || (funMode && isSlangWord(cleaned))) {
+    const scored = scoreWordWithBonus(cleaned, letters, bonus, usedIndexes, { funMode });
+    const slangOnly = !isValidWord(cleaned) && scored.slang;
+    return {
+      valid: true,
+      word: cleaned,
+      score: scored.score,
+      reason: slangOnly ? 'slang' : 'ok',
+      slang: slangOnly,
+      breakdown: scored.breakdown,
+      bonusApplied: scored.applied,
+    };
   }
-  if (funMode && isSlangWord(cleaned)) {
-    return { valid: true, word: cleaned, score: scoreWord(cleaned) + SLANG_BONUS, reason: 'slang', slang: true };
-  }
-  return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false };
+  return { valid: false, word: cleaned, score: 0, reason: 'invalid', slang: false, breakdown: null, bonusApplied: false };
 }
 
 export function flipCoin() {
@@ -136,11 +242,16 @@ export function activePlayerId(firstPlayerId, turnIndex) {
   return turnIndex % 2 === 0 ? firstPlayerId : second;
 }
 
+export function resolveMode(mode) {
+  return String(mode || '').toLowerCase() === 'story' ? 'story' : 'classic';
+}
+
 export class RoomManager {
   constructor(options = {}) {
     this.rooms = new Map();
     this.tokens = new Map();
     this.defaultTurnSeconds = options.turnSeconds || DEFAULT_TURN_SECONDS;
+    this.defaultFillSeconds = options.fillSeconds || STORY_FILL_SECONDS;
     this.testSecret = options.testSecret || '';
     this.now = options.now || (() => Date.now());
     this.onEmit = options.onEmit || (() => {});
@@ -171,23 +282,30 @@ export class RoomManager {
     this.onEmit(room);
   }
 
-  createRoom({ name, token, testSecret, turnSeconds, socketId, funMode } = {}) {
+  createRoom({ name, token, testSecret, turnSeconds, fillSeconds, socketId, funMode, mode, storyLength } = {}) {
     if (token) this.leaveByToken(token);
     const existing = new Set(this.rooms.keys());
     const code = generateCode(existing);
     const playerToken = randomUUID();
     const turnSecs = this._resolveTurnSeconds(testSecret, turnSeconds);
     const player = this._makePlayer('p1', name, playerToken, socketId);
+    const gameMode = resolveMode(mode);
     const room = {
       code,
       status: 'lobby',
+      mode: gameMode,
+      matchId: randomUUID(),
       turnSeconds: turnSecs,
+      fillSeconds: this._resolveFillSeconds(testSecret, fillSeconds),
+      storyLength: gameMode === 'story' ? resolveStoryLength(storyLength) : 0,
       firstPlayerId: null,
       turnIndex: 0,
       current: null,
       lastResult: null,
       rematch: { p1: false, p2: false },
-      funMode: !!funMode,
+      funMode: gameMode === 'classic' && !!funMode,
+      story: null,
+      resumeStatus: null,
       players: { p1: player, p2: null },
       createdAt: this.now(),
     };
@@ -214,7 +332,8 @@ export class RoomManager {
     const player = this._makePlayer('p2', name, playerToken, socketId);
     room.players.p2 = player;
     this.tokens.set(playerToken, { code: room.code, playerId: 'p2' });
-    this._startCoinFlip(room);
+    if (room.mode === 'story') this._startStoryFill(room);
+    else this._startCoinFlip(room);
     return { room, player };
   }
 
@@ -231,7 +350,7 @@ export class RoomManager {
     player.socketId = socketId;
     player.connected = true;
     if (name) player.name = sanitiseName(name);
-    if (room.status === 'paused') this._resumeTurn(room);
+    if (room.status === 'paused') this._resumeClock(room);
     this._emit(room);
     return { room, player, resumed: true };
   }
@@ -244,6 +363,8 @@ export class RoomManager {
     player.socketId = null;
     if (room.status === 'playing' && room.current && !room.current.paused) {
       this._pauseTurn(room);
+    } else if (room.status === 'filling' && room.story && !room.story.paused) {
+      this._pauseFill(room);
     }
     this._emit(room);
     this._scheduleCleanup(room);
@@ -268,16 +389,53 @@ export class RoomManager {
     this._scheduleCleanup(room);
   }
 
-  submitWord(socketId, word) {
+  submitWord(socketId, word, usedIndexes) {
     const found = this._findBySocket(socketId);
     if (!found) return { error: 'You are not in a match.' };
     const { room, player } = found;
+    if (room.mode === 'story') return { error: 'It is not time to play a word.' };
     if (room.status !== 'playing' || !room.current) return { error: 'It is not time to play a word.' };
     if (room.current.paused) return { error: 'Waiting for your opponent to return.' };
     if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
     if (room.current.submitted) return { error: 'You have already played this turn.' };
-    const judged = judgeWord(word, room.current.letters, { funMode: !!room.funMode });
+    const judged = judgeWord(word, room.current.letters, {
+      funMode: !!room.funMode,
+      bonus: room.current.bonus,
+      usedIndexes,
+    });
     this._finishTurn(room, judged);
+    return { ok: true };
+  }
+
+  submitStory(socketId, answers) {
+    const found = this._findBySocket(socketId);
+    if (!found) return { error: 'You are not in a match.' };
+    const { room, player } = found;
+    if (room.mode !== 'story' || !room.story) return { error: 'This is not a Story Duel.' };
+    if (room.status === 'paused') return { error: 'Waiting for your opponent to return.' };
+    if (room.status !== 'filling') return { error: 'It is not time to fill the story.' };
+    if (room.story.submitted[player.id]) return { error: 'You have already submitted.' };
+    const cleaned = sanitiseAnswers(answers, room.story.blanks.length);
+    if (!answersComplete(cleaned)) return { error: 'Please fill in every blank.' };
+    room.story.answers[player.id] = cleaned;
+    room.story.submitted[player.id] = true;
+    this._maybeStartReveal(room);
+    this._emit(room);
+    return { ok: true };
+  }
+
+  voteStory(socketId, key) {
+    const found = this._findBySocket(socketId);
+    if (!found) return { error: 'You are not in a match.' };
+    const { room, player } = found;
+    if (room.mode !== 'story' || !room.story) return { error: 'This is not a Story Duel.' };
+    if (room.status !== 'revealing') return { error: 'It is not time to vote.' };
+    if (room.story.voteReveal) return { error: 'Voting for this line is over.' };
+    if (!VERSION_KEYS.includes(key)) return { error: 'Pick a version to vote for.' };
+    if (room.story.votes[player.id]) return { error: 'You have already voted.' };
+    room.story.votes[player.id] = key;
+    if (room.story.votes.p1 && room.story.votes.p2) this._applyVotes(room);
+    else this._emit(room);
     return { ok: true };
   }
 
@@ -285,8 +443,6 @@ export class RoomManager {
     const found = this._findPlayer(socketId, token);
     if (!found) return { error: 'You are not in a match.' };
     const { room, player } = found;
-    // Rebind a fresh socket (refresh / reconnect) so later events keep working
-    // even if the client has not finished its resume handshake yet.
     if (socketId && player.socketId !== socketId) {
       player.socketId = socketId;
       player.connected = true;
@@ -299,8 +455,6 @@ export class RoomManager {
       return { error: 'It is not time to play a word.' };
     }
     if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
-    // A word check is a cheap in-memory lookup. Always answer it so a rapid
-    // tap or a stale rate-limit stamp cannot hide the "✓ word!" hint.
     player.lastCheckAt = this.now();
     const cleaned = sanitiseWord(word);
     if (cleaned.length < MIN_WORD_LEN || !canForm(cleaned, room.current.letters)) {
@@ -349,6 +503,7 @@ export class RoomManager {
           playerId: room.current.playerId,
           letters: room.current.letters,
           values: room.current.letters.map((ch) => LETTER_VALUES[ch]),
+          bonus: room.current.bonus || null,
           turnNumber: room.current.turnNumber,
           endsAt: room.current.endsAt,
           remainingMs: room.current.paused
@@ -363,7 +518,11 @@ export class RoomManager {
       version: VERSION,
       code: room.code,
       status: room.status,
+      mode: room.mode || 'classic',
+      matchId: room.matchId,
       turnSeconds: room.turnSeconds,
+      fillSeconds: room.fillSeconds,
+      storyLength: room.storyLength,
       firstPlayerId: room.firstPlayerId,
       turnIndex: room.turnIndex,
       you: you ? this._publicPlayer(you, true) : null,
@@ -371,11 +530,151 @@ export class RoomManager {
       current,
       lastResult: room.lastResult,
       funMode: !!room.funMode,
+      story: this._serializeStory(room, forPlayerId),
       rematch: {
         you: !!(you && room.rematch[you.id]),
         opponent: !!(opponent && room.rematch[opponent.id]),
       },
     };
+  }
+
+  _serializeStory(room, forPlayerId) {
+    const story = room.story;
+    if (!story || room.mode !== 'story') return null;
+    const you = forPlayerId;
+    const opp = forPlayerId === 'p1' ? 'p2' : 'p1';
+    const lines = story.lines.map((line, index) => ({
+      index,
+      text: renderLine(line.template, line.blanks.map(() => '')),
+      numbered: undefined,
+      templateNumbers: line.template,
+      blankCount: line.blanks.length,
+      prompts: line.blanks.map((b) => b.prompt),
+    }));
+    // numbered text with [1] [2] for the whole story, counted across all blanks
+    let n = 0;
+    const numberedStory = story.lines.map((line) => line.template.replace(/\{[a-z]+\}/g, () => `[${++n}]`)).join(' ');
+    const base = {
+      length: room.storyLength,
+      numberedStory,
+      lines: lines.map((line) => ({
+        index: line.index,
+        blankCount: line.blankCount,
+        prompts: line.prompts,
+        text: story.lines[line.index].template.replace(/\{[a-z]+\}/g, '____'),
+      })),
+      blanks: story.blanks.map((b) => ({
+        id: b.id,
+        prompt: b.prompt,
+        type: b.type,
+        lineIndex: b.lineIndex,
+      })),
+      youSubmitted: !!story.submitted[you],
+      opponentSubmitted: !!story.submitted[opp],
+      yourAnswers: (story.answers[you] || story.blanks.map(() => '')).slice(),
+    };
+
+    const fillLike = room.status === 'filling' || (room.status === 'paused' && room.resumeStatus === 'filling');
+    if (fillLike) {
+      return {
+        ...base,
+        phase: 'fill',
+        endsAt: story.fillEndsAt,
+        remainingMs: story.paused
+          ? story.remainingMs
+          : Math.max(0, story.fillEndsAt - this.now()),
+        paused: !!story.paused,
+      };
+    }
+
+    const ended = room.status === 'ended';
+    const revealing = room.status === 'revealing' || (room.status === 'paused' && room.resumeStatus === 'revealing') || ended;
+    if (!revealing) return { ...base, phase: 'lobby' };
+
+    const voteLines = story.voteLines;
+    const lineIndex = Math.min(story.revealIndex, Math.max(0, voteLines.length - 1));
+    const rawLineIndex = voteLines[lineIndex];
+    const order = story.versionOrder || ['p1', 'p2'];
+    const versions = order.map((pid, i) => {
+      const key = VERSION_KEYS[i];
+      const answers = answersForLine(story, story.answers[pid], rawLineIndex);
+      const ver = {
+        key,
+        label: VERSION_LABELS[key],
+        text: renderLine(story.lines[rawLineIndex].template, answers),
+      };
+      if (story.voteReveal || ended) {
+        ver.playerId = pid;
+        ver.yours = pid === you;
+        ver.name = room.players[pid]?.name;
+      }
+      return ver;
+    });
+
+    const payload = {
+      ...base,
+      phase: ended ? 'ended' : 'reveal',
+      subphase: story.voteReveal || ended ? 'authors' : 'vote',
+      lineIndex,
+      lineCount: voteLines.length,
+      preamble: preambleLines(story, rawLineIndex),
+      currentLine: {
+        template: story.lines[rawLineIndex].template.replace(/\{[a-z]+\}/g, '____'),
+        versions,
+      },
+      youVoted: !!story.votes[you],
+      opponentVoted: !!story.votes[opp],
+      yourVote: story.votes[you] || null,
+      scores: {
+        you: room.players[you]?.score || 0,
+        opponent: room.players[opp]?.score || 0,
+      },
+    };
+
+    if (story.voteReveal || ended) {
+      const tally = { peach: 0, blossom: 0 };
+      for (const pid of ['p1', 'p2']) {
+        if (story.votes[pid]) tally[story.votes[pid]] += 1;
+      }
+      payload.tally = tally;
+    }
+
+    if (ended) {
+      const youText = renderStoryText(story.lines, story.answers[you], story.blanks);
+      const oppText = renderStoryText(story.lines, story.answers[opp], story.blanks);
+      payload.fullStories = {
+        you: youText,
+        opponent: oppText,
+        merged: this._mergedStory(room, you, opp),
+      };
+    }
+    return payload;
+  }
+
+  _mergedStory(room, youId, oppId) {
+    const story = room.story;
+    const parts = [];
+    let cursor = 0;
+    for (const line of story.lines) {
+      if (!line.blanks.length) {
+        parts.push({ text: line.template, winner: null });
+        continue;
+      }
+      const youSlice = (story.answers[youId] || []).slice(cursor, cursor + line.blanks.length);
+      const oppSlice = (story.answers[oppId] || []).slice(cursor, cursor + line.blanks.length);
+      cursor += line.blanks.length;
+      const lineKey = story.lineWinners?.[line.id] || story.lineWinners?.[String(story.lines.indexOf(line))];
+      // lineWinners keyed by raw line index
+      const rawIndex = story.lines.indexOf(line);
+      const winnerId = story.lineWinners?.[rawIndex] || null;
+      parts.push({
+        you: renderLine(line.template, youSlice),
+        opponent: renderLine(line.template, oppSlice),
+        winnerId,
+        winner: winnerId === youId ? 'you' : winnerId === oppId ? 'opponent' : winnerId === 'draw' ? 'draw' : null,
+      });
+    }
+    return parts;
   }
 
   _resolveTurnSeconds(testSecret, turnSeconds) {
@@ -384,6 +683,14 @@ export class RoomManager {
       if (Number.isFinite(n)) return Math.min(60, Math.max(2, Math.round(n)));
     }
     return this.defaultTurnSeconds;
+  }
+
+  _resolveFillSeconds(testSecret, fillSeconds) {
+    if (this.testSecret && testSecret && testSecret === this.testSecret) {
+      const n = Number(fillSeconds);
+      if (Number.isFinite(n)) return Math.min(180, Math.max(5, Math.round(n)));
+    }
+    return this.defaultFillSeconds;
   }
 
   _makePlayer(id, name, token, socketId) {
@@ -459,6 +766,7 @@ export class RoomManager {
     room.current = {
       playerId,
       letters,
+      bonus: assignBonus(letters.length),
       turnNumber: room.turnIndex + 1,
       startedAt: now,
       endsAt: now + room.turnSeconds * 1000,
@@ -484,6 +792,9 @@ export class RoomManager {
         word: '',
         score: 0,
         reason: 'timeout',
+        slang: false,
+        breakdown: null,
+        bonusApplied: false,
       });
     }, ms + 20);
   }
@@ -516,6 +827,153 @@ export class RoomManager {
     this._armTurnTimer(room);
   }
 
+  _resumeClock(room) {
+    if (room.resumeStatus === 'filling') this._resumeFill(room);
+    else this._resumeTurn(room);
+  }
+
+  _startStoryFill(room) {
+    const generated = generateStory(room.storyLength);
+    const now = this.now();
+    const fillMs = room.fillSeconds * 1000;
+    room.matchId = room.matchId || randomUUID();
+    room.status = 'filling';
+    room.resumeStatus = null;
+    room.winnerId = null;
+    room.lastResult = null;
+    room.story = {
+      lines: generated.lines,
+      blanks: generated.blanks,
+      answers: { p1: generated.blanks.map(() => ''), p2: generated.blanks.map(() => '') },
+      submitted: { p1: false, p2: false },
+      autoFilled: { p1: false, p2: false },
+      fillStartedAt: now,
+      fillEndsAt: now + fillMs,
+      remainingMs: fillMs,
+      paused: false,
+      revealIndex: 0,
+      voteLines: voteLineIndexes(generated),
+      versionOrder: ['p1', 'p2'],
+      votes: { p1: null, p2: null },
+      voteReveal: false,
+      lineWinners: {},
+    };
+    if (!room.players.p1.connected || !room.players.p2?.connected) {
+      this._pauseFill(room);
+    }
+    this._emit(room);
+    this._armFillTimer(room);
+  }
+
+  _armFillTimer(room) {
+    if (!room.story || room.story.paused || room.status !== 'filling') return;
+    const ms = Math.max(0, room.story.fillEndsAt - this.now());
+    this._setTimer(room.code, 'fill', () => {
+      if (!this.rooms.has(room.code)) return;
+      if (room.status !== 'filling' || !room.story) return;
+      this._timeoutFill(room);
+    }, ms + 20);
+  }
+
+  _pauseFill(room) {
+    if (!room.story || room.story.paused || room.status !== 'filling') return;
+    room.story.remainingMs = Math.max(0, room.story.fillEndsAt - this.now());
+    room.story.paused = true;
+    room.resumeStatus = 'filling';
+    room.status = 'paused';
+    const timers = this.timers.get(room.code);
+    if (timers && timers.fill) {
+      clearTimeout(timers.fill);
+      timers.fill = null;
+    }
+  }
+
+  _resumeFill(room) {
+    if (!room.story || !room.story.paused) {
+      if (room.status === 'paused' && room.resumeStatus === 'filling' && room.players.p1.connected && room.players.p2?.connected) {
+        room.status = 'filling';
+        room.resumeStatus = null;
+      }
+      return;
+    }
+    if (!room.players.p1.connected || !room.players.p2?.connected) return;
+    const now = this.now();
+    room.story.paused = false;
+    room.story.fillStartedAt = now;
+    room.story.fillEndsAt = now + room.story.remainingMs;
+    room.status = 'filling';
+    room.resumeStatus = null;
+    this._armFillTimer(room);
+  }
+
+  _timeoutFill(room) {
+    for (const pid of ['p1', 'p2']) {
+      if (!room.story.submitted[pid]) {
+        room.story.answers[pid] = autoFillAnswers(room.story.blanks, room.story.answers[pid]);
+        room.story.submitted[pid] = true;
+        room.story.autoFilled[pid] = true;
+      }
+    }
+    this._maybeStartReveal(room);
+    this._emit(room);
+  }
+
+  _maybeStartReveal(room) {
+    if (!room.story?.submitted.p1 || !room.story?.submitted.p2) return;
+    const timers = this.timers.get(room.code);
+    if (timers && timers.fill) {
+      clearTimeout(timers.fill);
+      timers.fill = null;
+    }
+    room.story.paused = false;
+    this._beginRevealLine(room, 0);
+  }
+
+  _beginRevealLine(room, index) {
+    const story = room.story;
+    if (index >= story.voteLines.length) {
+      this._endGame(room);
+      return;
+    }
+    story.revealIndex = index;
+    story.votes = { p1: null, p2: null };
+    story.voteReveal = false;
+    const order = ['p1', 'p2'];
+    if (randomInt(2) === 1) order.reverse();
+    story.versionOrder = order;
+    room.status = 'revealing';
+    room.resumeStatus = null;
+    this._emit(room);
+  }
+
+  _applyVotes(room) {
+    const story = room.story;
+    const order = story.versionOrder;
+    const keyToPlayer = {
+      [VERSION_KEYS[0]]: order[0],
+      [VERSION_KEYS[1]]: order[1],
+    };
+    const counts = { p1: 0, p2: 0 };
+    for (const voter of ['p1', 'p2']) {
+      const key = story.votes[voter];
+      const author = keyToPlayer[key];
+      if (author) {
+        counts[author] += 1;
+        room.players[author].score += 1;
+      }
+    }
+    const rawLine = story.voteLines[story.revealIndex];
+    if (counts.p1 === counts.p2) story.lineWinners[rawLine] = 'draw';
+    else story.lineWinners[rawLine] = counts.p1 > counts.p2 ? 'p1' : 'p2';
+    story.voteReveal = true;
+    this._emit(room);
+    this._setTimer(room.code, 'voteReveal', () => {
+      if (!this.rooms.has(room.code) || room.status !== 'revealing') return;
+      if (!room.story?.voteReveal) return;
+      this._beginRevealLine(room, story.revealIndex + 1);
+    }, VOTE_REVEAL_MS);
+  }
+
   _finishTurn(room, judged) {
     if (!room.current || room.current.submitted) return;
     room.current.submitted = true;
@@ -531,6 +989,9 @@ export class RoomManager {
       valid: judged.valid,
       reason: judged.reason,
       slang: !!judged.slang,
+      bonusApplied: !!judged.bonusApplied,
+      breakdown: judged.breakdown || null,
+      bonus: room.current.bonus || null,
       turnNumber: room.current.turnNumber,
     };
     player.history.push(entry);
@@ -548,7 +1009,7 @@ export class RoomManager {
     room.turnIndex += 1;
     this._emit(room);
     this._setTimer(room.code, 'intermission', () => {
-      if (!this.rooms.has(room.code) || room.status !== 'intermission') return;
+      if (!this.rooms.has(room.code)) return;
       if (room.turnIndex >= TOTAL_TURNS) this._endGame(room);
       else this._startTurn(room);
     }, INTERMISSION_MS);
@@ -557,6 +1018,7 @@ export class RoomManager {
   _endGame(room) {
     room.status = 'ended';
     room.current = null;
+    room.resumeStatus = null;
     const s1 = room.players.p1.score;
     const s2 = room.players.p2.score;
     room.winnerId = s1 === s2 ? null : (s1 > s2 ? 'p1' : 'p2');
@@ -573,7 +1035,9 @@ export class RoomManager {
     room.lastResult = null;
     room.winnerId = null;
     room.rematch = { p1: false, p2: false };
-    this._startCoinFlip(room);
+    room.matchId = randomUUID();
+    if (room.mode === 'story') this._startStoryFill(room);
+    else this._startCoinFlip(room);
   }
 
   _scheduleCleanup(room) {

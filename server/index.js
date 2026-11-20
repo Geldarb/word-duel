@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { loadDictionary, loadSlang, dictionarySize, slangSize } from './dictionary.js';
+import { loadDictionary, loadSlang, dictionarySize, slangSize, listSlang } from './dictionary.js';
 import { RoomManager, VERSION, EMOJIS, DEFAULT_TURN_SECONDS } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +51,11 @@ app.get('/healthz', (_req, res) => {
   res.type('text/plain').send(`ok ${VERSION}`);
 });
 
+app.get('/api/slang', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({ words: listSlang() });
+});
+
 app.get('/', (_req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
@@ -80,7 +85,10 @@ io.on('connection', (socket) => {
         token: payload.token,
         testSecret: payload.testSecret,
         turnSeconds: payload.turnSeconds,
+        fillSeconds: payload.fillSeconds,
         funMode: payload.funMode,
+        mode: payload.mode,
+        storyLength: payload.storyLength,
         socketId: socket.id,
       });
       if (typeof cb === 'function') {
@@ -139,7 +147,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('submitWord', (payload = {}, cb) => {
-    const result = manager.submitWord(socket.id, payload.word);
+    const result = manager.submitWord(socket.id, payload.word, payload.tiles);
+    if (result?.error) return ackError(cb, result.error);
+    if (typeof cb === 'function') cb({ ok: true });
+  });
+
+  socket.on('submitStory', (payload = {}, cb) => {
+    const result = manager.submitStory(socket.id, payload.answers);
+    if (result?.error) return ackError(cb, result.error);
+    if (typeof cb === 'function') cb({ ok: true });
+  });
+
+  socket.on('voteStory', (payload = {}, cb) => {
+    const result = manager.voteStory(socket.id, payload.key);
     if (result?.error) return ackError(cb, result.error);
     if (typeof cb === 'function') cb({ ok: true });
   });
@@ -164,9 +184,6 @@ io.on('connection', (socket) => {
 
   socket.on('leave', (_payload, cb) => {
     manager.disconnect(socket.id);
-    const found = /* already disconnected */ null;
-    void found;
-    // After disconnect the socket is no longer mapped. Use token from client.
     if (typeof cb === 'function') cb({ ok: true });
   });
 

@@ -41,3 +41,7 @@ export function dictionarySize() {
 export function slangSize() {
   return slang.size;
 }
+
+export function listSlang() {
+  return [...slang].sort((a, b) => a.localeCompare(b));
+}
