@@ -172,15 +172,53 @@ describe('checkWord', () => {
     assert.equal(paused.error, 'It is not time to play a word.');
   });
 
-  it('rate-limits repeated checks from the same player', () => {
+  it('still answers rapid checks so the hint cannot be dropped by a rate limit', () => {
     playState();
     const first = manager.checkWord('s1', 'COLOUR');
     assert.equal(first.valid, true);
     const rapid = manager.checkWord('s1', 'COLOURS');
-    assert.equal(rapid.error, 'slow-down');
+    assert.equal(rapid.error, undefined);
+    assert.equal(rapid.valid, true);
+    assert.equal(rapid.word, 'COLOURS');
+  });
+
+  it('answers a check for the joiner when it is their turn', () => {
+    playState();
+    room.current.playerId = 'p2';
+    const result = manager.checkWord('s2', 'COLOUR');
+    assert.equal(result.ok, true);
+    assert.equal(result.valid, true);
+    assert.equal(result.word, 'COLOUR');
+    assert.equal(manager.checkWord('s1', 'COLOUR').error, 'It is not your turn.');
+  });
+
+  it('accepts a check after resume, including with only the session token', () => {
+    playState();
+    const token = room.players.p1.token;
+    manager.disconnect('s1');
+    assert.equal(room.players.p1.socketId, null);
     now += CHECK_WORD_MIN_INTERVAL_MS;
-    const later = manager.checkWord('s1', 'COLOURS');
-    assert.equal(later.valid, true);
+    // New socket, no resume yet: token still finds the player and rebinds.
+    const viaToken = manager.checkWord('s1-new', 'COLOUR', token);
+    assert.equal(viaToken.ok, true);
+    assert.equal(viaToken.valid, true);
+    assert.equal(room.players.p1.socketId, 's1-new');
+
+    manager.disconnect('s1-new');
+    const resumed = manager.resume({ token, socketId: 's1-resumed', name: 'Ada' });
+    assert.equal(resumed.resumed, true);
+    now += CHECK_WORD_MIN_INTERVAL_MS;
+    const afterResume = manager.checkWord('s1-resumed', 'COLOURS');
+    assert.equal(afterResume.ok, true);
+    assert.equal(afterResume.valid, true);
+
+    room.current.playerId = 'p2';
+    const p2token = room.players.p2.token;
+    manager.disconnect('s2');
+    const p2viaToken = manager.checkWord('s2-new', 'COLOUR', p2token);
+    assert.equal(p2viaToken.ok, true);
+    assert.equal(p2viaToken.valid, true);
+    manager._clearTimers(room.code);
   });
 });
 

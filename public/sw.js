@@ -1,10 +1,10 @@
-const VERSION = 'WD-v0.3';
+const VERSION = 'WD-v0.3.1';
 const CACHE = 'word-duel-' + VERSION;
 const ASSETS = [
   '/',
   '/index.html',
-  '/styles.css',
-  '/app.js',
+  '/styles.css?v=0.3.1',
+  '/app.js?v=0.3.1',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -48,7 +48,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // JS and CSS are network-first with a versioned URL, so a phone that still
+  // has an older service worker will not keep serving a stale app.js that
+  // never shows the "✓ word!" hint.
+  const isAppAsset = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
   event.respondWith((async () => {
+    if (isAppAsset) {
+      try {
+        const fresh = await fetch(req);
+        if (fresh.ok) {
+          const cache = await caches.open(CACHE);
+          cache.put(req, fresh.clone());
+        }
+        return fresh;
+      } catch {
+        const cached = await caches.match(req);
+        return cached || caches.match(url.pathname) || Response.error();
+      }
+    }
     const cached = await caches.match(req);
     if (cached) return cached;
     try {

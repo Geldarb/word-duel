@@ -145,7 +145,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('checkWord', (payload = {}, cb) => {
-    const result = manager.checkWord(socket.id, payload.word);
+    const result = manager.checkWord(socket.id, payload.word, payload.token);
     if (result?.error) return ackError(cb, result.error);
     if (typeof cb === 'function') cb({ ok: true, word: result.word, valid: !!result.valid, slang: !!result.slang });
   });

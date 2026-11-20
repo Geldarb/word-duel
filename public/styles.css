@@ -829,7 +829,7 @@ h1 {
   #screen-play.hidden { display: none !important; }
   #screen-play .top-bar { grid-area: bar; }
   #screen-play .turn-meta { grid-area: meta; flex-direction: column; align-items: flex-start; margin: 0; }
-  #screen-play .word-area { grid-area: rack; margin: 0; align-self: center; width: 100%; }
+  #screen-play .word-area { grid-area: rack; margin: 0; align-self: center; width: 100%; overflow: visible; }
   #screen-play .word-rack { margin: 0; max-height: 64px; }
   #screen-play .tile-tray { grid-area: tray; margin: 0; align-content: center; align-self: center; }
   #screen-play .play-actions { grid-area: actions; margin: 0; }

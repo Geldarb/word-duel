@@ -4,7 +4,7 @@ A cosy real-time 1v1 word game for two phones. One of you creates a room, the
 other joins with a short code, and you take turns making a word from a fresh
 seven-letter scramble.
 
-**v0.3**
+**v0.3.1**
 
 Open the link on two phones, type a display name, tap **Create room** on one
 and **Join** on the other, then read out the four-letter code.

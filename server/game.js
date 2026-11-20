@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { isValidWord, isSlangWord } from './dictionary.js';
 
-export const VERSION = 'v0.3';
+export const VERSION = 'v0.3.1';
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
 export const MIN_WORD_LEN = 2;
@@ -206,6 +206,7 @@ export class RoomManager {
       if (existing && existing.code === room.code) {
         return this.resume({ token, socketId, name });
       }
+      this.leaveByToken(token);
     }
     if (room.players.p2) return { error: 'That room is already full.' };
     if (room.status !== 'lobby') return { error: 'That match has already started.' };
@@ -280,19 +281,27 @@ export class RoomManager {
     return { ok: true };
   }
 
-  checkWord(socketId, word) {
-    const found = this._findBySocket(socketId);
+  checkWord(socketId, word, token) {
+    const found = this._findPlayer(socketId, token);
     if (!found) return { error: 'You are not in a match.' };
     const { room, player } = found;
+    // Rebind a fresh socket (refresh / reconnect) so later events keep working
+    // even if the client has not finished its resume handshake yet.
+    if (socketId && player.socketId !== socketId) {
+      player.socketId = socketId;
+      player.connected = true;
+    }
+    if (room.status === 'paused' && room.current?.paused) {
+      this._resumeTurn(room);
+      this._emit(room);
+    }
     if (room.status !== 'playing' || !room.current || room.current.paused || room.current.submitted) {
       return { error: 'It is not time to play a word.' };
     }
     if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
-    const now = this.now();
-    if (now - (player.lastCheckAt || 0) < CHECK_WORD_MIN_INTERVAL_MS) {
-      return { error: 'slow-down' };
-    }
-    player.lastCheckAt = now;
+    // A word check is a cheap in-memory lookup. Always answer it so a rapid
+    // tap or a stale rate-limit stamp cannot hide the "✓ word!" hint.
+    player.lastCheckAt = this.now();
     const cleaned = sanitiseWord(word);
     if (cleaned.length < MIN_WORD_LEN || !canForm(cleaned, room.current.letters)) {
       return { ok: true, word: cleaned, valid: false, slang: false };
@@ -403,12 +412,25 @@ export class RoomManager {
   }
 
   _findBySocket(socketId) {
+    if (!socketId) return null;
     for (const room of this.rooms.values()) {
       for (const player of [room.players.p1, room.players.p2]) {
         if (player && player.socketId === socketId) return { room, player };
       }
     }
     return null;
+  }
+
+  _findPlayer(socketId, token) {
+    if (token) {
+      const ref = this.tokens.get(token);
+      if (ref) {
+        const room = this.rooms.get(ref.code);
+        const player = room?.players[ref.playerId];
+        if (player && player.token === token) return { room, player };
+      }
+    }
+    return this._findBySocket(socketId);
   }
 
   _startCoinFlip(room) {

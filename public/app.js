@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.3';
+  const VERSION = 'v0.3.1';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
@@ -83,6 +83,7 @@
   let lastCheckedWord = '';
   let lastCheckValid = false;
   let lastCheckSlang = false;
+  let inFlightWord = '';
 
 
   const socket = io({
@@ -327,43 +328,88 @@
     return !!(state?.current?.yours && state.status === 'playing' && !state.current.paused);
   }
 
+  function ensureWordHint() {
+    if (els.wordHint) return els.wordHint;
+    const rack = els.rack;
+    if (!rack) return null;
+    let wrap = rack.closest('.word-area');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'word-area';
+      rack.replaceWith(wrap);
+      wrap.appendChild(rack);
+    }
+    const p = document.createElement('p');
+    p.id = 'word-hint';
+    p.className = 'word-hint';
+    p.dataset.testid = 'word-hint';
+    p.setAttribute('aria-live', 'polite');
+    wrap.appendChild(p);
+    els.wordHint = p;
+    return p;
+  }
+
   function setWordHint(valid, slang) {
-    if (!valid) els.wordHint.textContent = '';
-    else els.wordHint.textContent = slang ? '✓ slang!' : '✓ word!';
+    const el = ensureWordHint();
+    if (!el) return;
+    if (!valid) el.textContent = '';
+    else el.textContent = slang ? '✓ slang!' : '✓ word!';
+  }
+
+  function wordsMatch(a, b) {
+    return String(a || '').toUpperCase() === String(b || '').toUpperCase();
+  }
+
+  function clearWordCheck() {
+    if (checkTimer) clearTimeout(checkTimer);
+    checkTimer = null;
+    checkSeq += 1;
+    inFlightWord = '';
+    lastCheckedWord = '';
+    lastCheckValid = false;
+    lastCheckSlang = false;
+    setWordHint(false);
   }
 
   function scheduleWordCheck() {
     const word = currentSelection();
     if (!canCheckWord() || word.length < 2) {
-      if (checkTimer) clearTimeout(checkTimer);
-      checkTimer = null;
-      checkSeq += 1;
-      lastCheckedWord = '';
-      lastCheckValid = false;
-      lastCheckSlang = false;
-      lastCheckSlang = false;
-      setWordHint(false);
+      clearWordCheck();
       return;
     }
     if (word === lastCheckedWord) {
       setWordHint(lastCheckValid, lastCheckSlang);
       return;
     }
+    // A state refresh for the same selection must not cancel the in-flight check.
+    if (inFlightWord === word) return;
     setWordHint(false);
     if (checkTimer) clearTimeout(checkTimer);
     const seq = ++checkSeq;
-    checkTimer = setTimeout(() => {
-      checkTimer = null;
-      socket.emit('checkWord', { word }, (res) => {
+    inFlightWord = word;
+    const send = (delay) => {
+      checkTimer = setTimeout(() => {
+        checkTimer = null;
         if (seq !== checkSeq) return;
-        const current = currentSelection();
-        if (!res?.ok || res.word !== current) return;
-        lastCheckedWord = current;
-        lastCheckValid = !!res.valid;
-        lastCheckSlang = !!res.slang;
-        setWordHint(lastCheckValid, lastCheckSlang);
-      });
-    }, 200);
+        socket.emit('checkWord', { word, token }, (res) => {
+          if (seq !== checkSeq) return;
+          const current = currentSelection();
+          const retryable = res?.error === 'slow-down' || res?.error === 'You are not in a match.';
+          if (retryable) {
+            inFlightWord = current;
+            send(250);
+            return;
+          }
+          inFlightWord = '';
+          if (!res?.ok || !wordsMatch(res.word, current)) return;
+          lastCheckedWord = current;
+          lastCheckValid = !!res.valid;
+          lastCheckSlang = !!res.slang;
+          setWordHint(lastCheckValid, lastCheckSlang);
+        });
+      }, delay);
+    };
+    send(200);
   }
 
   function makeTileButton(tile, inRack) {
@@ -472,6 +518,7 @@
     state = null;
     coinAnimatedFor = '';
     checkSeq += 1;
+    inFlightWord = '';
     lastCheckedWord = '';
     lastCheckValid = false;
     lastCheckSlang = false;
@@ -577,6 +624,8 @@
       tiles = [];
       lastCheckedWord = '';
       lastCheckValid = false;
+      lastCheckSlang = false;
+      inFlightWord = '';
     }
     renderState();
   });
@@ -585,7 +634,7 @@
     if (payload?.emoji) showReaction(payload.emoji, !!payload.mine);
   });
 
-  socket.on('connect', () => {
+  function tryResume() {
     if (token && !leavingConfirmed) {
       socket.emit('resume', { token, name: displayName() }, (res) => {
         if (res?.error === 'session-expired') {
@@ -594,7 +643,9 @@
         }
       });
     }
-  });
+  }
+  socket.on('connect', tryResume);
+  if (socket.connected) tryResume();
 
   socket.on('disconnect', () => {
     // keep current screen; socket.io will reconnect and resume
@@ -643,6 +694,9 @@
     getState: () => state,
     submit: (word) => new Promise((resolve) => {
       socket.emit('submitWord', { word }, resolve);
+    }),
+    checkWord: (word) => new Promise((resolve) => {
+      socket.emit('checkWord', { word, token }, resolve);
     }),
   };
 })();
