@@ -12,8 +12,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="icon" href="/icons/icon-192.png">
   <title>Word Duel</title>
-  <link rel="stylesheet" href="/styles.css?v=0.3.1">
-  <!-- WD-v0.3.1 -->
+  <link rel="stylesheet" href="/styles.css?v=0.4">
+  <!-- WD-v0.4 -->
 </head>
 <body>
   <div id="app">
@@ -23,39 +23,71 @@
 
     <section id="screen-home" class="screen" data-testid="screen-home">
       <div class="top-bar">
+        <button type="button" class="icon-btn" id="btn-menu" data-testid="menu-btn" aria-label="Menu">⚙</button>
         <span class="top-spacer"></span>
         <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
       </div>
-      <div class="home-hero">
-        <div class="logo-tiles" aria-hidden="true">
-          <span class="mini-tile tilt-left">W<sub>4</sub></span>
-          <span class="mini-tile tilt-right">D<sub>2</sub></span>
+      <div class="home-scroll">
+        <div class="home-hero">
+          <div class="logo-tiles" aria-hidden="true">
+            <span class="mini-tile tilt-left">W<sub>4</sub></span>
+            <span class="mini-tile tilt-right">D<sub>2</sub></span>
+          </div>
+          <h1>Word Duel</h1>
+          <p class="version" data-testid="version">v0.4</p>
+          <p class="tagline">A cosy word match for two.</p>
         </div>
-        <h1>Word Duel</h1>
-        <p class="version" data-testid="version">v0.3.1</p>
-        <p class="tagline">A cosy word match for two.</p>
-      </div>
-      <form id="home-form" class="home-form" autocomplete="off">
-        <label class="field">
-          <span>Your name</span>
-          <input id="name-input" data-testid="name-input" type="text" maxlength="16" placeholder="Name" enterkeyhint="done" autocapitalize="words" autocomplete="nickname">
-        </label>
-        <label class="fun-toggle">
-          <input id="fun-mode" data-testid="fun-mode" type="checkbox">
-          <span class="fun-switch" aria-hidden="true"></span>
-          <span>Fun mode</span>
-        </label>
-        <button type="button" id="btn-create" class="big-btn" data-testid="create">Create room</button>
-        <p class="or">or join with a code</p>
-        <div class="join-row">
-          <label class="field code-field">
-            <span>Room code</span>
-            <input id="code-input" data-testid="code-input" type="text" maxlength="6" placeholder="ABCD" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go">
+        <form id="home-form" class="home-form" autocomplete="off">
+          <label class="field">
+            <span>Your name</span>
+            <input id="name-input" data-testid="name-input" type="text" maxlength="16" placeholder="Name" enterkeyhint="done" autocapitalize="words" autocomplete="nickname">
           </label>
-          <button type="button" id="btn-join" class="big-btn join-btn" data-testid="join">Join</button>
-        </div>
-        <p id="home-error" class="error-text" data-testid="home-error" role="status" hidden></p>
-      </form>
+          <div class="mode-picker" role="group" aria-label="Game mode" data-testid="mode-picker">
+            <button type="button" class="mode-btn selected" data-mode="classic" data-testid="mode-classic">Word Duel</button>
+            <button type="button" class="mode-btn" data-mode="story" data-testid="mode-story">Story Duel</button>
+          </div>
+          <label class="fun-toggle" id="fun-toggle-wrap" data-classic-only>
+            <input id="fun-mode" data-testid="fun-mode" type="checkbox">
+            <span class="fun-switch" aria-hidden="true"></span>
+            <span>Fun mode</span>
+          </label>
+          <div class="length-picker hidden" id="length-picker" data-story-only data-testid="length-picker">
+            <span>Story length</span>
+            <div class="choice-row">
+              <button type="button" class="choice-btn selected" data-length="5" data-testid="length-5">5 blanks</button>
+              <button type="button" class="choice-btn" data-length="8" data-testid="length-8">8 blanks</button>
+            </div>
+          </div>
+          <button type="button" id="btn-create" class="big-btn" data-testid="create">Create room</button>
+          <p class="or">or join with a code</p>
+          <div class="join-row">
+            <label class="field code-field">
+              <span>Room code</span>
+              <input id="code-input" data-testid="code-input" type="text" maxlength="6" placeholder="ABCD" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go">
+            </label>
+            <button type="button" id="btn-join" class="big-btn join-btn" data-testid="join">Join</button>
+          </div>
+          <p id="home-error" class="error-text" data-testid="home-error" role="status" hidden></p>
+        </form>
+        <section id="home-history" class="home-history" data-testid="home-history" hidden>
+          <h2>Match history</h2>
+          <ul id="history-list" data-testid="history-list"></ul>
+        </section>
+      </div>
+    </section>
+
+    <section id="screen-slang" class="screen hidden" data-testid="screen-slang">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" id="slang-back" data-testid="slang-back" aria-label="Back">←</button>
+        <h2>Fun mode words</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <label class="field slang-search">
+        <span>Search</span>
+        <input id="slang-search" data-testid="slang-search" type="search" placeholder="Search slang" enterkeyhint="search" autocapitalize="none" autocomplete="off" spellcheck="false">
+      </label>
+      <p id="slang-count" class="hint slang-count" data-testid="slang-count"></p>
+      <ul id="slang-list" class="slang-list" data-testid="slang-list"></ul>
     </section>
 
     <section id="screen-lobby" class="screen hidden" data-testid="screen-lobby">
@@ -69,6 +101,7 @@
         <div id="lobby-code" class="room-code" data-testid="room-code">————</div>
         <p class="hint">Read this out to your opponent.</p>
         <p class="fun-badge" data-fun-badge data-testid="fun-badge-lobby" hidden>Fun mode</p>
+        <p class="fun-badge" data-mode-badge data-testid="mode-badge-lobby" hidden></p>
         <div id="lobby-players" class="lobby-players" data-testid="lobby-players"></div>
         <p id="lobby-status" class="status-line" data-testid="lobby-status">Waiting for your opponent…</p>
       </div>
@@ -123,6 +156,71 @@
       <div id="emoji-bar" class="emoji-bar" data-testid="emoji-bar" role="group" aria-label="Reactions"></div>
     </section>
 
+    <section id="screen-fill" class="screen hidden" data-testid="screen-fill">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="fill-back">←</button>
+        <h2>Story Duel</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="turn-meta">
+        <div id="fill-timer" class="timer" data-testid="fill-timer"><span id="fill-timer-num">180</span></div>
+        <p id="fill-heading" class="turn-status" data-testid="fill-heading">Fill in the blanks</p>
+        <p id="fill-count" class="turn-count" data-testid="fill-count">5 blanks</p>
+      </div>
+      <div class="fill-scroll" data-testid="fill-scroll">
+        <p id="fill-story" class="story-preview" data-testid="fill-story"></p>
+        <div id="fill-fields" class="fill-fields" data-testid="fill-fields"></div>
+      </div>
+      <p id="fill-status" class="status-line" data-testid="fill-status" hidden></p>
+      <button type="button" id="btn-submit-story" class="big-btn" data-testid="submit-story">Submit story</button>
+      <div id="fill-emoji-bar" class="emoji-bar" role="group" aria-label="Reactions"></div>
+    </section>
+
+    <section id="screen-reveal" class="screen hidden" data-testid="screen-reveal">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="reveal-back">←</button>
+        <div class="scoreboard" data-testid="reveal-scores">
+          <div class="score-chip you">
+            <span class="score-name" id="reveal-you-name">You</span>
+            <span class="score-num" id="reveal-you-score" data-testid="reveal-you-score">0</span>
+          </div>
+          <div class="score-chip them">
+            <span class="score-num" id="reveal-opp-score" data-testid="reveal-opp-score">0</span>
+            <span class="score-name" id="reveal-opp-name">Opponent</span>
+          </div>
+        </div>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <p id="reveal-line-count" class="turn-count reveal-line-count" data-testid="reveal-line-count">Line 1 of 5</p>
+      <div class="reveal-scroll" data-testid="reveal-scroll">
+        <p id="reveal-preamble" class="reveal-preamble" data-testid="reveal-preamble" hidden></p>
+        <article class="version-card" data-version="peach" data-testid="version-peach">
+          <h3>Version 🍑</h3>
+          <p class="version-text" id="version-peach-text" data-testid="version-peach-text"></p>
+          <p class="version-author" data-author="peach" hidden></p>
+        </article>
+        <article class="version-card" data-version="blossom" data-testid="version-blossom">
+          <h3>Version 🌸</h3>
+          <p class="version-text" id="version-blossom-text" data-testid="version-blossom-text"></p>
+          <p class="version-author" data-author="blossom" hidden></p>
+        </article>
+      </div>
+      <div class="reveal-actions">
+        <button type="button" id="btn-begin-tale" class="big-btn" data-testid="begin-tale">Begin the tale!</button>
+        <div class="voice-row">
+          <button type="button" id="btn-mute-voice" class="pill-btn" data-testid="mute-voice">Mute voice</button>
+          <button type="button" id="btn-hear-line" class="pill-btn" data-testid="hear-line" hidden>Tap to hear this line</button>
+        </div>
+        <p id="voice-fallback" class="hint" data-testid="voice-fallback" hidden>Voice is unavailable — read the lines yourself.</p>
+        <div class="vote-row" id="vote-row" data-testid="vote-row">
+          <button type="button" class="pill-btn primary vote-btn" data-vote="peach" data-testid="vote-peach">Vote 🍑</button>
+          <button type="button" class="pill-btn primary vote-btn" data-vote="blossom" data-testid="vote-blossom">Vote 🌸</button>
+        </div>
+        <p id="vote-status" class="status-line" data-testid="vote-status"></p>
+      </div>
+      <div id="reveal-emoji-bar" class="emoji-bar" role="group" aria-label="Reactions"></div>
+    </section>
+
     <section id="screen-result" class="screen hidden" data-testid="screen-result">
       <div class="top-bar">
         <button type="button" class="icon-btn back-btn" data-back aria-label="Back">←</button>
@@ -133,6 +231,7 @@
         <p id="result-label" class="result-label" data-testid="result-label"></p>
         <p id="result-word" class="result-word" data-testid="result-word"></p>
         <p id="result-slang" class="slang-note" data-testid="result-slang" hidden>slang +2</p>
+        <p id="result-breakdown" class="result-breakdown" data-testid="result-breakdown" hidden></p>
         <p id="result-score" class="result-score" data-testid="result-score"></p>
         <div class="scoreboard tall" data-testid="result-scores">
           <div class="score-chip you">
@@ -156,6 +255,7 @@
       <div class="end-scroll" data-testid="end-scroll">
         <p id="end-title" class="end-title" data-testid="end-title"></p>
         <p class="fun-badge" data-fun-badge data-testid="fun-badge-end" hidden>Fun mode</p>
+        <p class="fun-badge" data-mode-badge data-testid="mode-badge-end" hidden></p>
         <div class="scoreboard tall">
           <div class="score-chip you">
             <span class="score-name" id="end-you-name">You</span>
@@ -166,16 +266,20 @@
             <span class="score-name" id="end-opp-name">Opponent</span>
           </div>
         </div>
-        <div class="history-grid">
-          <div>
-            <h3 id="hist-you-title">You</h3>
-            <ol id="hist-you" class="word-list" data-testid="hist-you"></ol>
-          </div>
-          <div>
-            <h3 id="hist-opp-title">Opponent</h3>
-            <ol id="hist-opp" class="word-list" data-testid="hist-opp"></ol>
+        <p id="end-record" class="match-record" data-testid="end-record" hidden></p>
+        <div id="end-classic" data-testid="end-classic">
+          <div class="history-grid">
+            <div>
+              <h3 id="hist-you-title">You</h3>
+              <ol id="hist-you" class="word-list" data-testid="hist-you"></ol>
+            </div>
+            <div>
+              <h3 id="hist-opp-title">Opponent</h3>
+              <ol id="hist-opp" class="word-list" data-testid="hist-opp"></ol>
+            </div>
           </div>
         </div>
+        <div id="end-story" class="end-story" data-testid="end-story" hidden></div>
       </div>
       <div class="end-actions">
         <button type="button" id="btn-rematch" class="big-btn" data-testid="rematch">Rematch</button>
@@ -197,8 +301,20 @@
         </div>
       </div>
     </div>
+    <div id="menu-panel" class="modal hidden" data-testid="menu-panel">
+      <div class="modal-card menu-card">
+        <h2>Settings</h2>
+        <label class="fun-toggle menu-sound">
+          <input id="sound-toggle" data-testid="sound-toggle" type="checkbox" checked>
+          <span class="fun-switch" aria-hidden="true"></span>
+          <span>Sound</span>
+        </label>
+        <button type="button" id="btn-slang" class="big-btn" data-testid="open-slang">Fun mode words</button>
+        <button type="button" id="menu-close" class="pill-btn" data-testid="menu-close">Close</button>
+      </div>
+    </div>
   </div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js?v=0.3.1"></script>
+  <script src="/app.js?v=0.4"></script>
 </body>
 </html>

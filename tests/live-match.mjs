@@ -80,20 +80,21 @@ function findValid(letters) {
 }
 
 function findInvalid(letters) {
-  const L = letters.join('').toUpperCase();
-  const tries = ['QX', 'ZX', 'JJ', 'QQ', 'VX', 'WW', 'KK', 'YY', 'HH', 'FF'];
+  const L = letters.map((c) => c.toUpperCase());
+  const tries = ['QX', 'ZX', 'JJ', 'QQ', 'VX', 'WW', 'KK', 'YY', 'HH', 'FF', 'VV', 'XX', 'ZZ', 'CC', 'BB', 'NN', 'RR', 'LL', 'TT', 'PP', 'DD', 'GG'];
   for (const w of tries) {
-    if (canForm(w, L)) return w;
+    if (canForm(w, L) && !COMMON.includes(w.toLowerCase())) return w;
   }
-  // build a 2-letter combo that is not in COMMON
   for (let i = 0; i < L.length; i++) {
     for (let j = 0; j < L.length; j++) {
-      if (i === j) continue;
-      const w = L[i] + L[j];
-      if (!COMMON.includes(w.toLowerCase())) return w;
+      for (let k = 0; k < L.length; k++) {
+        if (new Set([i, j, k]).size < 3) continue;
+        const w = L[i] + L[j] + L[k];
+        if (!COMMON.includes(w.toLowerCase()) && !/^[AEIOU]+$/i.test(w)) return w;
+      }
     }
   }
-  return L.slice(0, 2);
+  return 'QX';
 }
 
 function connect(name) {
@@ -174,6 +175,11 @@ async function main() {
   await waitFor(ada, (s) => s && (s.status === 'coin' || s.status === 'playing'), 'coin/play', 10000);
   const playing = await waitFor(ada, (s) => s && s.status === 'playing' && s.current, 'first turn', 8000);
   console.log('first turn', playing.current.letters.join(''), 'secs', playing.turnSeconds);
+  const bonus = playing.current.bonus;
+  if (!bonus || !['DL', 'DW'].includes(bonus.type) || bonus.index < 0 || bonus.index > 6) {
+    throw new Error(`missing or invalid bonus tile: ${JSON.stringify(bonus)}`);
+  }
+  console.log('bonus', bonus);
 
   const seen = { valid: 0, invalid: 0, timeout: 0 };
   for (let turn = 1; turn <= 12; turn++) {
@@ -200,8 +206,21 @@ async function main() {
       const word = findValid(letters);
       if (!word) throw new Error(`no valid word in ${letters.join('')} on turn ${turn}`);
       console.log(`  turn ${turn} valid ${word} from ${letters.join('')}`);
-      await emit(actor, 'submitWord', { word });
+      const used = [];
+      const bag = word.split('');
+      letters.forEach((ch, i) => {
+        const at = bag.indexOf(ch);
+        if (at !== -1) {
+          used.push(i);
+          bag[at] = null;
+        }
+      });
+      await emit(actor, 'submitWord', { word, tiles: used });
       await waitFor(ada, (s) => s?.status === 'intermission' && s.lastResult?.valid === true && s.lastResult.word === word, `turn ${turn} valid result`, 8000);
+      const applied = ada.state.lastResult.bonusApplied;
+      const shown = ada.state.lastResult.breakdown;
+      if (applied && !shown) throw new Error('bonus applied but no score breakdown');
+      console.log('    bonus', ada.state.current?.bonus || ada.state.lastResult.bonus, 'applied', applied);
     }
     const result = ada.state.lastResult;
     seen[result.reason === 'timeout' ? 'timeout' : (result.valid ? 'valid' : 'invalid')] += 1;
