@@ -47,3 +47,12 @@ The UKACD may be used in a software package or redistributed provided the
 copyright notice is prominently displayed and the text of the UKACD document
 is included verbatim. That document is included in full at
 `licenses/UKACD-README.TXT`.
+
+## Common words for Crossword Race
+
+Crossword Race puzzles are built only from 3–6 letter words in Alan Beale’s
+public-domain 12dicts list `2of4brif.txt`. The filtered copy shipped here is
+`data/common.txt`. This everyday vocabulary is used to pick a base word for
+the letter wheel and the crossing words on the grid. The main 2–7 letter
+dictionary in `data/words.txt` is unchanged and still used to judge Word Duel
+turns.

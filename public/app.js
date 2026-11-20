@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.4';
+  const VERSION = 'v0.5';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
@@ -19,6 +19,7 @@
     reveal: $('#screen-reveal'),
     result: $('#screen-result'),
     end: $('#screen-end'),
+    race: $('#screen-race'),
   };
 
   const els = {
@@ -30,6 +31,24 @@
     funMode: $('#fun-mode'),
     funToggleWrap: $('#fun-toggle-wrap'),
     lengthPicker: $('#length-picker'),
+    raceSizePicker: $('#race-size-picker'),
+    raceYouName: $('#race-you-name'),
+    raceOppName: $('#race-opp-name'),
+    raceYouBar: $('#race-you-bar'),
+    raceOppBar: $('#race-opp-bar'),
+    raceYouCount: $('#race-you-count'),
+    raceOppCount: $('#race-opp-count'),
+    raceTime: $('#race-time'),
+    raceGrid: $('#race-grid'),
+    raceTrace: $('#race-trace'),
+    raceWheelWrap: $('#race-wheel-wrap'),
+    racePath: $('#race-path'),
+    raceWheel: $('#race-wheel'),
+    raceShuffle: $('#btn-race-shuffle'),
+    raceEmojiBar: $('#race-emoji-bar'),
+    endRace: $('#end-race'),
+    endRaceTime: $('#end-race-time'),
+    endRaceGrid: $('#end-race-grid'),
     lobbyCode: $('#lobby-code'),
     lobbyPlayers: $('#lobby-players'),
     lobbyStatus: $('#lobby-status'),
@@ -132,6 +151,7 @@
   let inFlightWord = '';
   let selectedMode = 'classic';
   let storyLength = 5;
+  let raceSize = 'small';
   let fillBoundFor = '';
   let fillAnswers = [];
   let lastTurnKey = '';
@@ -140,6 +160,13 @@
   let lastRevealKey = '';
   let viewingSlang = false;
   let slangWords = null;
+  let raceTiles = [];
+  let raceOrder = [];
+  let racePath = [];
+  let racePointerId = null;
+  let lastRaceFoundKey = '';
+  let lastRaceLetters = '';
+  let raceClockBase = 0;
   let audioCtx = null;
   let soundOn = localStorage.getItem(SOUND_KEY) !== 'off';
 
@@ -215,7 +242,7 @@
   }
 
   function renderEmojiBars() {
-    for (const bar of [els.emojiBar, els.endEmojiBar, els.fillEmojiBar, els.revealEmojiBar]) {
+    for (const bar of [els.emojiBar, els.endEmojiBar, els.fillEmojiBar, els.revealEmojiBar, els.raceEmojiBar]) {
       if (!bar) continue;
       bar.innerHTML = '';
       for (const emoji of EMOJIS) {
@@ -313,15 +340,21 @@
     const data = loadHistory();
     if (data.recorded.includes(next.matchId)) return;
     const name = next.opponent.name || 'Opponent';
-    const mode = next.mode === 'story' ? 'story' : 'classic';
-    if (!data.opponents[name]) data.opponents[name] = { classic: emptyRecord(), story: emptyRecord() };
+    const mode = next.mode === 'story' ? 'story' : (next.mode === 'race' ? 'race' : 'classic');
+    if (!data.opponents[name]) data.opponents[name] = { classic: emptyRecord(), story: emptyRecord(), race: emptyRecord() };
     if (!data.opponents[name][mode]) data.opponents[name][mode] = emptyRecord();
     const bucket = data.opponents[name][mode];
-    const ys = next.you?.score ?? 0;
-    const os = next.opponent?.score ?? 0;
-    if (ys > os) bucket.wins += 1;
-    else if (os > ys) bucket.losses += 1;
-    else bucket.draws += 1;
+    if (mode === 'race' && next.winnerId) {
+      if (next.winnerId === next.you?.id) bucket.wins += 1;
+      else if (next.winnerId === next.opponent?.id) bucket.losses += 1;
+      else bucket.draws += 1;
+    } else {
+      const ys = next.you?.score ?? 0;
+      const os = next.opponent?.score ?? 0;
+      if (ys > os) bucket.wins += 1;
+      else if (os > ys) bucket.losses += 1;
+      else bucket.draws += 1;
+    }
     data.recorded.push(next.matchId);
     data.recorded = data.recorded.slice(-80);
     saveHistory(data);
@@ -342,7 +375,7 @@
     els.homeHistory.hidden = false;
     els.historyList.innerHTML = names.map((name) => {
       const row = data.opponents[name];
-      return `<li><span class="opp-name">${escapeHtml(name)}</span><span class="record">Word ${formatRecord(row.classic)} · Story ${formatRecord(row.story)}</span></li>`;
+      return `<li><span class="opp-name">${escapeHtml(name)}</span><span class="record">Word ${formatRecord(row.classic)} · Story ${formatRecord(row.story)} · Race ${formatRecord(row.race)}</span></li>`;
     }).join('');
   }
 
@@ -351,9 +384,9 @@
     const data = loadHistory();
     const row = data.opponents[next.opponent.name || 'Opponent'];
     if (!row) return '';
-    const mode = next.mode === 'story' ? 'story' : 'classic';
+    const mode = next.mode === 'story' ? 'story' : (next.mode === 'race' ? 'race' : 'classic');
     const rec = row[mode] || emptyRecord();
-    const label = mode === 'story' ? 'Story Duel' : 'Word Duel';
+    const label = mode === 'story' ? 'Story Duel' : (mode === 'race' ? 'Crossword Race' : 'Word Duel');
     return `vs ${next.opponent.name}: ${label} ${rec.wins} win${rec.wins === 1 ? '' : 's'}, ${rec.losses} loss${rec.losses === 1 ? '' : 'es'}, ${rec.draws} draw${rec.draws === 1 ? '' : 's'}`;
   }
 
@@ -362,9 +395,11 @@
       case 'lobby': return 'lobby';
       case 'coin': return 'coin';
       case 'playing': return 'play';
+      case 'racing': return 'race';
       case 'paused':
         if (state?.mode === 'story' && state.story?.phase === 'fill') return 'fill';
         if (state?.mode === 'story' && state.story?.phase === 'reveal') return 'reveal';
+        if (state?.mode === 'race') return 'race';
         return 'play';
       case 'filling': return 'fill';
       case 'revealing': return 'reveal';
@@ -379,11 +414,15 @@
   }
 
   function setModeBadges(next) {
-    const story = next?.mode === 'story';
-    const label = story ? `Story Duel · ${next.storyLength || 5} blanks` : '';
+    let label = '';
+    if (next?.mode === 'story') label = `Story Duel · ${next.storyLength || 5} blanks`;
+    else if (next?.mode === 'race') {
+      const size = next.raceSize || next.race?.size || 'small';
+      label = size === 'medium' ? 'Crossword Race · Medium' : 'Crossword Race · Small';
+    }
     $$('[data-mode-badge]').forEach((el) => {
-      el.hidden = !story;
-      if (story) el.textContent = label;
+      el.hidden = !label;
+      if (label) el.textContent = label;
     });
   }
 
@@ -395,8 +434,13 @@
       btn.classList.toggle('selected', Number(btn.dataset.length) === storyLength);
     });
     const story = selectedMode === 'story';
-    if (els.funToggleWrap) els.funToggleWrap.classList.toggle('hidden', story);
+    const race = selectedMode === 'race';
+    if (els.funToggleWrap) els.funToggleWrap.classList.toggle('hidden', story || race);
     if (els.lengthPicker) els.lengthPicker.classList.toggle('hidden', !story);
+    if (els.raceSizePicker) els.raceSizePicker.classList.toggle('hidden', !race);
+    $$('[data-race-size]').forEach((btn) => {
+      btn.classList.toggle('selected', btn.dataset.raceSize === raceSize);
+    });
   }
 
   function renderState() {
@@ -418,7 +462,8 @@
 
     if (state.status === 'lobby') renderLobby();
     if (state.status === 'coin') renderCoin();
-    if (state.status === 'playing' || (state.status === 'paused' && state.mode !== 'story')) renderPlay();
+    if (state.status === 'playing' || (state.status === 'paused' && state.mode !== 'story' && state.mode !== 'race')) renderPlay();
+    if (state.status === 'racing' || (state.status === 'paused' && state.mode === 'race')) renderRace();
     if (state.status === 'filling' || (state.status === 'paused' && state.story?.phase === 'fill')) renderFill();
     if (state.status === 'revealing' || (state.status === 'paused' && state.story?.phase === 'reveal')) renderReveal();
     if (state.status === 'intermission') renderResult();
@@ -491,6 +536,33 @@
     return String(s);
   }
 
+  function formatRaceClock(ms) {
+    const total = Math.max(0, Math.floor((ms || 0) / 1000));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  function syncRaceClock() {
+    if (!state?.race) {
+      raceClockBase = 0;
+      return;
+    }
+    if (state.status === 'ended' || state.status === 'paused' || state.race.paused) {
+      raceClockBase = 0;
+      return;
+    }
+    raceClockBase = Date.now() - (state.race.elapsedMs || 0);
+  }
+
+  function raceElapsedMs() {
+    if (!state?.race) return 0;
+    if (!raceClockBase || state.status === 'ended' || state.status === 'paused' || state.race.paused) {
+      return state.race.elapsedMs || 0;
+    }
+    return Math.max(0, Date.now() - raceClockBase);
+  }
+
   function tickTimer() {
     if (els.timerNum && (state?.status === 'playing' || state?.status === 'paused') && state?.current) {
       const s = remainingSeconds();
@@ -503,6 +575,9 @@
       els.fillTimerNum.textContent = formatSecs(s);
       els.fillTimer.classList.toggle('warn', s <= 30 && s > 10);
       els.fillTimer.classList.toggle('urgent', s <= 10);
+    }
+    if (els.raceTime && state?.mode === 'race' && (state.status === 'racing' || state.status === 'paused' || state.status === 'ended')) {
+      els.raceTime.textContent = formatRaceClock(raceElapsedMs());
     }
   }
 
@@ -519,6 +594,259 @@
     if (key === lastTurnKey) return;
     lastTurnKey = key;
     vibrate([30, 40, 50]);
+  }
+
+
+  function syncRaceTiles() {
+    const letters = state?.race?.letters || [];
+    const key = letters.join('');
+    if (key !== lastRaceLetters) {
+      raceTiles = letters.map((letter, id) => ({ id, letter }));
+      raceOrder = raceTiles.map((tile) => tile.id);
+      racePath = [];
+      lastRaceLetters = key;
+      lastRaceFoundKey = '';
+    }
+  }
+
+  function raceTracedWord() {
+    return racePath.map((id) => raceTiles[id]?.letter || '').join('');
+  }
+
+  function paintRaceGrid(root, { solved = false, animate = false } = {}) {
+    const race = state?.race;
+    if (!root || !race) return;
+    const prev = animate ? new Set(lastRaceFoundKey.split('|').filter(Boolean)) : new Set();
+    const rows = race.rows || 1;
+    const cols = race.cols || 1;
+    root.style.setProperty('--race-rows', String(rows));
+    root.style.setProperty('--race-cols', String(cols));
+    const wrap = root.parentElement;
+    if (wrap && wrap.classList.contains('race-grid-wrap')) {
+      const availW = wrap.clientWidth || 0;
+      const availH = wrap.clientHeight || 0;
+      if (availW && availH) {
+        const cell = Math.max(18, Math.min(44, Math.floor(availW / cols), Math.floor(availH / rows)));
+        root.style.width = `${cell * cols}px`;
+        root.style.height = `${cell * rows}px`;
+      }
+    } else {
+      root.style.width = '';
+      root.style.height = '';
+    }
+    root.innerHTML = '';
+    const cells = new Map();
+    for (const slot of race.slots || []) {
+      const dr = slot.dir === 'down' ? 1 : 0;
+      const dc = slot.dir === 'across' ? 1 : 0;
+      for (let i = 0; i < slot.length; i++) {
+        const row = slot.row + dr * i;
+        const col = slot.col + dc * i;
+        const key = `${row},${col}`;
+        const cell = cells.get(key) || { row, col, letter: '', found: false };
+        if (solved || (slot.found && slot.word)) {
+          cell.letter = slot.word[i];
+          cell.found = true;
+        }
+        cells.set(key, cell);
+      }
+    }
+    for (const cell of cells.values()) {
+      const div = document.createElement('div');
+      const fresh = cell.found && animate && !prev.has(`${cell.row},${cell.col}:${cell.letter}`);
+      div.className = 'race-cell' + (cell.found ? ' filled' : '') + (fresh ? ' pop' : '');
+      div.style.gridRow = String(cell.row + 1);
+      div.style.gridColumn = String(cell.col + 1);
+      div.textContent = cell.letter || '';
+      root.appendChild(div);
+    }
+    if (animate) {
+      lastRaceFoundKey = [...cells.values()]
+        .filter((cell) => cell.found)
+        .map((cell) => `${cell.row},${cell.col}:${cell.letter}`)
+        .join('|');
+    }
+  }
+
+  function layoutRaceLetters() {
+    if (!els.raceWheel) return;
+    const tiles = raceOrder.map((id) => raceTiles[id]).filter(Boolean);
+    const selected = new Set(racePath);
+    els.raceWheel.innerHTML = tiles.map((tile) => {
+      const on = selected.has(tile.id) ? ' on' : '';
+      return `<div class="race-letter${on}" data-letter-id="${tile.id}">${escapeHtml(tile.letter)}</div>`;
+    }).join('');
+    const rect = els.raceWheel.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height);
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const radius = Math.max(28, size / 2 - 26);
+    const start = -Math.PI / 2;
+    tiles.forEach((tile, i) => {
+      const angle = start + (i * 2 * Math.PI) / Math.max(tiles.length, 1);
+      const node = els.raceWheel.querySelector(`[data-letter-id="${tile.id}"]`);
+      if (!node) return;
+      node.style.left = `${cx + Math.cos(angle) * radius}px`;
+      node.style.top = `${cy + Math.sin(angle) * radius}px`;
+    });
+    drawRacePath();
+  }
+
+  function letterCenters() {
+    const wrap = els.raceWheelWrap.getBoundingClientRect();
+    const map = new Map();
+    for (const node of els.raceWheel.querySelectorAll('[data-letter-id]')) {
+      const r = node.getBoundingClientRect();
+      map.set(Number(node.dataset.letterId), {
+        x: r.left + r.width / 2 - wrap.left,
+        y: r.top + r.height / 2 - wrap.top,
+        id: Number(node.dataset.letterId),
+        radius: Math.max(r.width, r.height) * 0.62,
+      });
+    }
+    return map;
+  }
+
+  function drawRacePath() {
+    const svg = els.racePath;
+    if (!svg) return;
+    const wrap = els.raceWheelWrap.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${wrap.width || 1} ${wrap.height || 1}`);
+    const centers = letterCenters();
+    const pts = racePath.map((id) => centers.get(id)).filter(Boolean);
+    if (pts.length < 2) {
+      svg.innerHTML = '';
+      return;
+    }
+    const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    svg.innerHTML = `<path d="${d}" fill="none" stroke="#ee7a96" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"></path>`;
+  }
+
+  function letterAtPointer(clientX, clientY) {
+    const wrap = els.raceWheelWrap.getBoundingClientRect();
+    const x = clientX - wrap.left;
+    const y = clientY - wrap.top;
+    let best = null;
+    let bestDist = Infinity;
+    for (const point of letterCenters().values()) {
+      const dx = x - point.x;
+      const dy = y - point.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < point.radius && dist < bestDist) {
+        best = point;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  function renderRaceTrace() {
+    if (!els.raceTrace) return;
+    els.raceTrace.textContent = raceTracedWord();
+  }
+
+  function shakeRace() {
+    soundInvalid();
+    els.raceTrace.classList.remove('shake');
+    els.raceWheelWrap.classList.remove('shake');
+    void els.raceTrace.offsetWidth;
+    els.raceTrace.classList.add('shake');
+    els.raceWheelWrap.classList.add('shake');
+    setTimeout(() => {
+      els.raceTrace.classList.remove('shake');
+      els.raceWheelWrap.classList.remove('shake');
+    }, 420);
+  }
+
+  function clearRacePath() {
+    racePath = [];
+    renderRaceTrace();
+    layoutRaceLetters();
+  }
+
+  function addRaceLetter(id) {
+    if (id == null || racePath.includes(id)) {
+      if (racePath.length >= 2 && racePath[racePath.length - 2] === id) {
+        racePath.pop();
+        renderRaceTrace();
+        layoutRaceLetters();
+      }
+      return;
+    }
+    racePath.push(id);
+    soundTap();
+    renderRaceTrace();
+    layoutRaceLetters();
+  }
+
+  function submitRaceTrace() {
+    const word = raceTracedWord();
+    clearRacePath();
+    if (word.length < 3) return;
+    socket.emit('submitRaceWord', { word }, (res) => {
+      if (!res || res.error) {
+        if (res?.error) shakeRace();
+        return;
+      }
+      if (res.result === 'found') {
+        soundValid();
+        vibrate(20);
+      } else {
+        shakeRace();
+      }
+    });
+  }
+
+  function onRacePointerDown(ev) {
+    if (!(state?.status === 'racing' && !state.race?.paused)) return;
+    const hit = letterAtPointer(ev.clientX, ev.clientY);
+    if (!hit) return;
+    ev.preventDefault();
+    racePointerId = ev.pointerId;
+    racePath = [];
+    addRaceLetter(hit.id);
+    els.raceWheelWrap.setPointerCapture?.(ev.pointerId);
+  }
+
+  function onRacePointerMove(ev) {
+    if (racePointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    const hit = letterAtPointer(ev.clientX, ev.clientY);
+    if (hit) addRaceLetter(hit.id);
+  }
+
+  function onRacePointerUp(ev) {
+    if (racePointerId !== ev.pointerId) return;
+    ev.preventDefault();
+    racePointerId = null;
+    try { els.raceWheelWrap.releasePointerCapture?.(ev.pointerId); } catch { /* ignore */ }
+    submitRaceTrace();
+  }
+
+  function renderRace() {
+    const race = state.race;
+    if (!race) return;
+    syncRaceClock();
+    syncRaceTiles();
+    const you = state.you;
+    const opp = state.opponent;
+    const total = race.total || 0;
+    const youCount = race.youCount || 0;
+    const oppCount = race.opponentCount || 0;
+    els.raceYouName.textContent = you?.name || 'You';
+    els.raceOppName.textContent = opp?.name || 'Opponent';
+    els.raceYouCount.textContent = `${youCount}/${total}`;
+    els.raceOppCount.textContent = `${oppCount}/${total}`;
+    els.raceYouBar.style.width = total ? `${Math.round((youCount / total) * 100)}%` : '0%';
+    els.raceOppBar.style.width = total ? `${Math.round((oppCount / total) * 100)}%` : '0%';
+    paintRaceGrid(els.raceGrid, { animate: true });
+    renderRaceTrace();
+    layoutRaceLetters();
+    const paused = state.status === 'paused' || race.paused;
+    els.raceShuffle.disabled = paused;
+    if (paused) els.raceTime.textContent = `Paused · ${formatRaceClock(raceElapsedMs())}`;
+    else tickTimer();
+    armTimer(paused);
   }
 
   function renderPlay() {
@@ -616,6 +944,13 @@
     lastCheckedWord = '';
     lastCheckValid = false;
     lastCheckSlang = false;
+    raceTiles = [];
+    raceOrder = [];
+    racePath = [];
+    racePointerId = null;
+    lastRaceFoundKey = '';
+    lastRaceLetters = '';
+    raceClockBase = 0;
     setWordHint(false);
   }
 
@@ -854,17 +1189,26 @@
     els.histOppTitle.textContent = opp?.name || 'Opponent';
     const ys = you?.score ?? 0;
     const os = opp?.score ?? 0;
-    if (ys > os) els.endTitle.textContent = 'You win!';
+    if (state.winnerId && state.winnerId === you?.id) els.endTitle.textContent = 'You win!';
+    else if (state.winnerId && state.winnerId === opp?.id) els.endTitle.textContent = `${opp?.name || 'Opponent'} wins`;
+    else if (ys > os) els.endTitle.textContent = 'You win!';
     else if (os > ys) els.endTitle.textContent = `${opp?.name || 'Opponent'} wins`;
     else els.endTitle.textContent = "It's a draw!";
     const rec = recordLine(state);
     els.endRecord.hidden = !rec;
     els.endRecord.textContent = rec;
     const storyMode = state.mode === 'story';
-    els.endClassic.hidden = storyMode;
+    const raceMode = state.mode === 'race';
+    els.endClassic.hidden = storyMode || raceMode;
     els.endStory.hidden = !storyMode;
+    if (els.endRace) els.endRace.hidden = !raceMode;
     if (storyMode) renderEndStory();
-    else {
+    else if (raceMode) {
+      const total = state.race?.total || 0;
+      const time = formatRaceClock(state.race?.elapsedMs || 0);
+      els.endRaceTime.textContent = `${you?.score ?? 0}–${opp?.score ?? 0} of ${total} words · ${time}`;
+      paintRaceGrid(els.endRaceGrid, { solved: true, animate: false });
+    } else {
       historyItems(els.histYou, you?.history);
       historyItems(els.histOpp, opp?.history);
     }
@@ -1189,6 +1533,12 @@
       updateModeUi();
     });
   });
+  $$('[data-race-size]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      raceSize = btn.dataset.raceSize === 'medium' ? 'medium' : 'small';
+      updateModeUi();
+    });
+  });
 
   els.menuBtn.addEventListener('click', () => els.menuPanel.classList.remove('hidden'));
   els.menuClose.addEventListener('click', () => els.menuPanel.classList.add('hidden'));
@@ -1215,6 +1565,7 @@
       funMode: selectedMode === 'classic' && !!els.funMode.checked,
       mode: selectedMode,
       storyLength: selectedMode === 'story' ? storyLength : undefined,
+      raceSize: selectedMode === 'race' ? raceSize : undefined,
     }, (res) => {
       handleAck(res, 'Could not create a room.');
     });
@@ -1303,6 +1654,36 @@
     narrator.muted = !narrator.muted;
     if (narrator.muted) stopSpeech();
     updateVoiceChrome();
+  });
+
+  if (els.raceShuffle) {
+    els.raceShuffle.addEventListener('click', () => {
+      if (!(state?.status === 'racing' && !state.race?.paused)) return;
+      for (let i = raceOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [raceOrder[i], raceOrder[j]] = [raceOrder[j], raceOrder[i]];
+      }
+      soundTap();
+      layoutRaceLetters();
+    });
+  }
+  if (els.raceWheelWrap) {
+    els.raceWheelWrap.addEventListener('pointerdown', onRacePointerDown);
+    els.raceWheelWrap.addEventListener('pointermove', onRacePointerMove);
+    els.raceWheelWrap.addEventListener('pointerup', onRacePointerUp);
+    els.raceWheelWrap.addEventListener('pointercancel', onRacePointerUp);
+    els.raceWheelWrap.addEventListener('contextmenu', (ev) => ev.preventDefault());
+  }
+  window.addEventListener('resize', () => {
+    if (state?.mode === 'race' && state.race) {
+      if (screens.race && !screens.race.classList.contains('hidden') && els.raceGrid) {
+        paintRaceGrid(els.raceGrid, { animate: false });
+      }
+      if (state.status === 'ended' && els.endRaceGrid) {
+        paintRaceGrid(els.endRaceGrid, { solved: true, animate: false });
+      }
+      layoutRaceLetters();
+    }
   });
 
   els.rematch.addEventListener('click', () => socket.emit('rematch'));
@@ -1409,6 +1790,9 @@
     }),
     voteStory: (key) => new Promise((resolve) => {
       socket.emit('voteStory', { key }, resolve);
+    }),
+    submitRaceWord: (word) => new Promise((resolve) => {
+      socket.emit('submitRaceWord', { word }, resolve);
     }),
   };
 })();

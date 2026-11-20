@@ -874,6 +874,10 @@ h1 {
   gap: 8px;
 }
 
+.mode-picker .mode-btn[data-mode="race"] {
+  grid-column: 1 / -1;
+}
+
 .mode-btn, .choice-btn {
   height: 44px;
   border: 2px solid var(--tile-edge);
@@ -904,7 +908,7 @@ h1 {
   font-weight: 700;
 }
 
-.length-picker.hidden, [data-classic-only].hidden { display: none !important; }
+.length-picker.hidden, [data-classic-only].hidden, [data-story-only].hidden, [data-race-only].hidden { display: none !important; }
 
 .home-history {
   width: min(440px, 100%);
@@ -1202,4 +1206,274 @@ h1 {
   #screen-fill, #screen-reveal, #screen-slang, #screen-home {
     overflow: hidden;
   }
+}
+
+
+/* v0.5 Crossword Race */
+.race-meta {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.race-progress {
+  display: grid;
+  grid-template-columns: 76px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.race-progress .race-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-progress .bar {
+  height: 10px;
+  background: rgba(255, 253, 251, 0.7);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(90, 49, 64, 0.12);
+}
+
+.race-progress .bar > div {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff9eb3, #ee7a96);
+  transition: width 0.35s ease;
+}
+
+.race-progress.them .bar > div {
+  background: linear-gradient(90deg, #f5b89a, #f7a8b8);
+}
+
+.race-count { font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+
+.race-time {
+  margin: 0;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.race-grid-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 4px 0;
+}
+
+.race-grid-wrap {
+  container-type: size;
+}
+.race-grid {
+  display: grid;
+  grid-template-rows: repeat(var(--race-rows, 1), 1fr);
+  grid-template-columns: repeat(var(--race-cols, 1), 1fr);
+  gap: 3px;
+  width: min(100%, calc(var(--race-cols, 1) * 42px));
+  max-height: 100%;
+  aspect-ratio: var(--race-cols, 1) / var(--race-rows, 1);
+}
+
+.race-cell {
+  background: rgba(255, 251, 246, 0.9);
+  border: 2px solid var(--tile-edge);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: clamp(0.8rem, 4.6vw, 1.2rem);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--tile-edge);
+  min-width: 0;
+  min-height: 0;
+}
+
+.race-cell.filled {
+  background: linear-gradient(180deg, #fff6f0 0%, #ffd4c4 100%);
+}
+
+.race-cell.pop {
+  animation: race-pop 0.38s ease;
+}
+
+@keyframes race-pop {
+  0% { transform: scale(0.55); }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.race-trace {
+  flex-shrink: 0;
+  min-height: 1.4em;
+  margin: 2px 0 4px;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.race-trace.shake, .race-wheel-wrap.shake {
+  animation: race-shake 0.4s ease;
+}
+
+@keyframes race-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(4px); }
+}
+
+.race-wheel-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: min(220px, 58vw);
+  aspect-ratio: 1;
+  margin: 0 auto 6px;
+  touch-action: none;
+}
+
+.race-path {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.race-wheel {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.race-letter {
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border: 2px solid var(--tile-edge);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fffdfb 0%, #ffe8dc 100%);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 800;
+  box-shadow: 0 3px 0 var(--tile-edge);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.race-letter.on {
+  background: linear-gradient(180deg, #ff9eb3 0%, #ee7a96 100%);
+  color: #fff;
+  border-color: #ee7a96;
+  box-shadow: 0 3px 0 #d45b76;
+  transform: scale(1.08);
+}
+
+#btn-race-shuffle {
+  align-self: center;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 120px;
+  height: 44px;
+  margin-bottom: 4px;
+}
+
+#screen-race .emoji-bar { flex-shrink: 0; }
+
+.end-race {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.end-race-time {
+  margin: 0;
+  font-weight: 800;
+  color: var(--ink-soft);
+}
+
+.end-race .race-grid {
+  width: min(100%, calc(var(--race-cols, 1) * 32px));
+}
+
+@media (max-height: 664px) {
+  .race-letter { width: 48px; height: 48px; margin: -24px 0 0 -24px; font-size: 1.15rem; }
+  .race-wheel-wrap { width: min(200px, 54vw); }
+}
+
+@media (max-height: 640px) {
+  .race-wheel-wrap { width: min(188px, 50vw); }
+  .race-letter { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
+  .race-trace { font-size: 1.05rem; min-height: 1.2em; }
+  .race-grid { width: min(100%, calc(var(--race-cols, 1) * 34px)); }
+}
+
+@media (max-height: 420px) {
+  .race-meta { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 2px; }
+  .race-progress { grid-template-columns: 64px 1fr auto; flex: 1; min-width: 140px; }
+  .race-time { margin-left: auto; }
+  .race-wheel-wrap { width: min(150px, 36vh); margin-bottom: 2px; }
+  .race-letter { width: 40px; height: 40px; margin: -20px 0 0 -20px; font-size: 1rem; }
+  .race-trace { font-size: 0.95rem; margin: 0; }
+  #btn-race-shuffle { height: 36px; margin-bottom: 0; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) {
+  #screen-race {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(180px, 0.9fr);
+    grid-template-rows: auto auto auto 1fr auto auto;
+    grid-template-areas:
+      "bar bar"
+      "meta meta"
+      "grid trace"
+      "grid wheel"
+      "grid shuffle"
+      "emoji emoji";
+    gap: 4px 12px;
+    overflow: hidden;
+  }
+  #screen-race.hidden { display: none !important; }
+  #screen-race .top-bar { grid-area: bar; }
+  #screen-race .race-meta { grid-area: meta; }
+  #screen-race .race-grid-wrap { grid-area: grid; padding: 0; }
+  #screen-race .race-trace { grid-area: trace; align-self: end; margin: 0; }
+  #screen-race .race-wheel-wrap { grid-area: wheel; align-self: center; margin: 0 auto; }
+  #screen-race #btn-race-shuffle { grid-area: shuffle; justify-self: center; width: auto; min-width: 120px; max-width: 160px; }
+  #screen-race .emoji-bar { grid-area: emoji; }
+}
+
+/* Fit the extra Crossword Race controls on short landscape homes */
+@media (orientation: landscape) and (max-height: 420px) {
+  #screen-home .logo-tiles { display: none; }
+  #screen-home h1 { font-size: 1.15rem; margin: 0; }
+  #screen-home .home-hero { margin: 0; }
+  #screen-home .version { display: none; }
+  #screen-home .length-picker > span { display: none; }
+  #screen-home .home-form { gap: 4px; margin: 0 auto 4px; }
+  #screen-home .home-history { display: none; }
 }

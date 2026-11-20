@@ -1,6 +1,13 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { isValidWord, isSlangWord } from './dictionary.js';
 import {
+  generatePuzzle,
+  loadCommon,
+  puzzleHasWord,
+  resolveRaceSize,
+  canFormWord,
+} from './crossword.js';
+import {
   generateStory,
   resolveStoryLength,
   sanitiseAnswers,
@@ -17,7 +24,8 @@ import {
   VOTE_REVEAL_MS,
 } from './story.js';
 
-export const VERSION = 'v0.4';
+export const VERSION = 'v0.5';
+let commonLoaded = false;
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
 export const MIN_WORD_LEN = 2;
@@ -243,7 +251,10 @@ export function activePlayerId(firstPlayerId, turnIndex) {
 }
 
 export function resolveMode(mode) {
-  return String(mode || '').toLowerCase() === 'story' ? 'story' : 'classic';
+  const value = String(mode || '').toLowerCase();
+  if (value === 'story') return 'story';
+  if (value === 'race' || value === 'crossword' || value === 'crossword-race') return 'race';
+  return 'classic';
 }
 
 export class RoomManager {
@@ -282,7 +293,7 @@ export class RoomManager {
     this.onEmit(room);
   }
 
-  createRoom({ name, token, testSecret, turnSeconds, fillSeconds, socketId, funMode, mode, storyLength } = {}) {
+  createRoom({ name, token, testSecret, turnSeconds, fillSeconds, socketId, funMode, mode, storyLength, raceSize, puzzleSeed } = {}) {
     if (token) this.leaveByToken(token);
     const existing = new Set(this.rooms.keys());
     const code = generateCode(existing);
@@ -298,6 +309,8 @@ export class RoomManager {
       turnSeconds: turnSecs,
       fillSeconds: this._resolveFillSeconds(testSecret, fillSeconds),
       storyLength: gameMode === 'story' ? resolveStoryLength(storyLength) : 0,
+      raceSize: gameMode === 'race' ? resolveRaceSize(raceSize) : null,
+      puzzleSeed: gameMode === 'race' ? this._resolvePuzzleSeed(testSecret, puzzleSeed) : null,
       firstPlayerId: null,
       turnIndex: 0,
       current: null,
@@ -305,6 +318,8 @@ export class RoomManager {
       rematch: { p1: false, p2: false },
       funMode: gameMode === 'classic' && !!funMode,
       story: null,
+      race: null,
+      winnerId: null,
       resumeStatus: null,
       players: { p1: player, p2: null },
       createdAt: this.now(),
@@ -333,6 +348,7 @@ export class RoomManager {
     room.players.p2 = player;
     this.tokens.set(playerToken, { code: room.code, playerId: 'p2' });
     if (room.mode === 'story') this._startStoryFill(room);
+    else if (room.mode === 'race') this._startRace(room);
     else this._startCoinFlip(room);
     return { room, player };
   }
@@ -361,11 +377,7 @@ export class RoomManager {
     const { room, player } = found;
     player.connected = false;
     player.socketId = null;
-    if (room.status === 'playing' && room.current && !room.current.paused) {
-      this._pauseTurn(room);
-    } else if (room.status === 'filling' && room.story && !room.story.paused) {
-      this._pauseFill(room);
-    }
+    this._pauseIfNeeded(room);
     this._emit(room);
     this._scheduleCleanup(room);
   }
@@ -385,6 +397,7 @@ export class RoomManager {
       this._destroyRoom(room.code);
       return;
     }
+    this._pauseIfNeeded(room);
     this._emit(room);
     this._scheduleCleanup(room);
   }
@@ -393,7 +406,7 @@ export class RoomManager {
     const found = this._findBySocket(socketId);
     if (!found) return { error: 'You are not in a match.' };
     const { room, player } = found;
-    if (room.mode === 'story') return { error: 'It is not time to play a word.' };
+    if (room.mode === 'story' || room.mode === 'race') return { error: 'It is not time to play a word.' };
     if (room.status !== 'playing' || !room.current) return { error: 'It is not time to play a word.' };
     if (room.current.paused) return { error: 'Waiting for your opponent to return.' };
     if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
@@ -405,6 +418,31 @@ export class RoomManager {
     });
     this._finishTurn(room, judged);
     return { ok: true };
+  }
+
+  submitRaceWord(socketId, word) {
+    const found = this._findBySocket(socketId);
+    if (!found) return { error: 'You are not in a match.' };
+    const { room, player } = found;
+    if (room.mode !== 'race' || !room.race) return { error: 'This is not a Crossword Race.' };
+    if (room.status === 'paused' || room.race.paused) return { error: 'Waiting for your opponent to return.' };
+    if (room.status === 'ended') return { error: 'The race is already over.' };
+    if (room.status !== 'racing') return { error: 'It is not time to play a word.' };
+    const cleaned = sanitiseWord(word);
+    if (cleaned.length < 3) return { ok: true, result: 'miss', word: cleaned };
+    const already = room.race.found[player.id].includes(cleaned);
+    if (already) return { ok: true, result: 'already', word: cleaned };
+    const onGrid = puzzleHasWord(room.race.puzzle, cleaned);
+    const formable = canFormWord(cleaned, room.race.puzzle.letters);
+    if (!onGrid || !formable) return { ok: true, result: 'miss', word: cleaned };
+    room.race.found[player.id].push(cleaned);
+    player.score = room.race.found[player.id].length;
+    if (player.score >= room.race.puzzle.words.length) {
+      this._endRace(room, player.id);
+    } else {
+      this._emit(room);
+    }
+    return { ok: true, result: 'found', word: cleaned };
   }
 
   submitStory(socketId, answers) {
@@ -523,6 +561,7 @@ export class RoomManager {
       turnSeconds: room.turnSeconds,
       fillSeconds: room.fillSeconds,
       storyLength: room.storyLength,
+      raceSize: room.raceSize,
       firstPlayerId: room.firstPlayerId,
       turnIndex: room.turnIndex,
       you: you ? this._publicPlayer(you, true) : null,
@@ -531,6 +570,8 @@ export class RoomManager {
       lastResult: room.lastResult,
       funMode: !!room.funMode,
       story: this._serializeStory(room, forPlayerId),
+      race: this._serializeRace(room, forPlayerId),
+      winnerId: room.status === 'ended' ? (room.winnerId || null) : undefined,
       rematch: {
         you: !!(you && room.rematch[you.id]),
         opponent: !!(opponent && room.rematch[opponent.id]),
@@ -829,7 +870,14 @@ export class RoomManager {
 
   _resumeClock(room) {
     if (room.resumeStatus === 'filling') this._resumeFill(room);
+    else if (room.resumeStatus === 'racing' || room.mode === 'race') this._resumeRace(room);
     else this._resumeTurn(room);
+  }
+
+  _pauseIfNeeded(room) {
+    if (room.status === 'playing' && room.current && !room.current.paused) this._pauseTurn(room);
+    else if (room.status === 'filling' && room.story && !room.story.paused) this._pauseFill(room);
+    else if (room.status === 'racing' && room.race && !room.race.paused) this._pauseRace(room);
   }
 
   _startStoryFill(room) {
@@ -1036,8 +1084,139 @@ export class RoomManager {
     room.winnerId = null;
     room.rematch = { p1: false, p2: false };
     room.matchId = randomUUID();
+    room.story = null;
+    room.race = null;
     if (room.mode === 'story') this._startStoryFill(room);
-    else this._startCoinFlip(room);
+    else if (room.mode === 'race') {
+      room.puzzleSeed = null;
+      this._startRace(room);
+    } else this._startCoinFlip(room);
+  }
+
+  _resolvePuzzleSeed(testSecret, puzzleSeed) {
+    if (this.testSecret && testSecret && testSecret === this.testSecret) {
+      const n = Number(puzzleSeed);
+      if (Number.isFinite(n) && n !== 0) return (n >>> 0) || 1;
+    }
+    return null;
+  }
+
+  _raceElapsed(room) {
+    if (!room.race) return 0;
+    if (room.race.paused || room.status === 'ended') return room.race.elapsedMs || 0;
+    return (room.race.elapsedMs || 0) + Math.max(0, this.now() - room.race.segmentStartedAt);
+  }
+
+  _startRace(room) {
+    if (!commonLoaded) {
+      loadCommon();
+      commonLoaded = true;
+    }
+    const seed = room.puzzleSeed || (randomInt(0xffffffff) || 1);
+    const puzzle = generatePuzzle(room.raceSize || 'small', seed);
+    const now = this.now();
+    room.matchId = room.matchId || randomUUID();
+    room.status = 'racing';
+    room.resumeStatus = null;
+    room.winnerId = null;
+    room.lastResult = null;
+    room.current = null;
+    room.rematch = { p1: false, p2: false };
+    if (room.players.p1) {
+      room.players.p1.score = 0;
+      room.players.p1.history = [];
+    }
+    if (room.players.p2) {
+      room.players.p2.score = 0;
+      room.players.p2.history = [];
+    }
+    room.race = {
+      size: puzzle.size,
+      seed: puzzle.seed,
+      puzzle,
+      found: { p1: [], p2: [] },
+      startedAt: now,
+      segmentStartedAt: now,
+      elapsedMs: 0,
+      paused: false,
+      endedAt: null,
+    };
+    if (!room.players.p1.connected || !room.players.p2?.connected) this._pauseRace(room);
+    this._emit(room);
+  }
+
+  _pauseRace(room) {
+    if (!room.race || room.race.paused || room.status !== 'racing') return;
+    room.race.elapsedMs = this._raceElapsed(room);
+    room.race.paused = true;
+    room.resumeStatus = 'racing';
+    room.status = 'paused';
+  }
+
+  _resumeRace(room) {
+    if (!room.race) return;
+    if (!room.race.paused) {
+      if (room.status === 'paused' && room.resumeStatus === 'racing' && room.players.p1.connected && room.players.p2?.connected) {
+        room.status = 'racing';
+        room.resumeStatus = null;
+      }
+      return;
+    }
+    if (!room.players.p1.connected || !room.players.p2?.connected) return;
+    room.race.paused = false;
+    room.race.segmentStartedAt = this.now();
+    room.status = 'racing';
+    room.resumeStatus = null;
+  }
+
+  _endRace(room, winnerId) {
+    if (!room.race) return;
+    room.race.elapsedMs = this._raceElapsed(room);
+    room.race.endedAt = this.now();
+    room.race.paused = false;
+    room.winnerId = winnerId;
+    room.players.p1.score = room.race.found.p1.length;
+    room.players.p2.score = room.race.found.p2.length;
+    room.status = 'ended';
+    room.resumeStatus = null;
+    room.current = null;
+    this._emit(room);
+  }
+
+  _serializeRace(room, forPlayerId) {
+    const race = room.race;
+    if (!race || room.mode !== 'race') return null;
+    const you = forPlayerId;
+    const opp = forPlayerId === 'p1' ? 'p2' : 'p1';
+    const puzzle = race.puzzle;
+    const yourFound = new Set(race.found[you] || []);
+    const ended = room.status === 'ended';
+    const slots = puzzle.words.map((place, index) => {
+      const found = ended || yourFound.has(place.word);
+      return {
+        id: index,
+        row: place.row,
+        col: place.col,
+        dir: place.dir,
+        length: place.word.length,
+        found,
+        word: found ? place.word : null,
+      };
+    });
+    return {
+      size: race.size,
+      letters: puzzle.letters.slice(),
+      rows: puzzle.rows,
+      cols: puzzle.cols,
+      slots,
+      youFound: (race.found[you] || []).slice(),
+      youCount: (race.found[you] || []).length,
+      opponentCount: (race.found[opp] || []).length,
+      total: puzzle.words.length,
+      elapsedMs: this._raceElapsed(room),
+      paused: !!race.paused,
+      ended,
+    };
   }
 
   _scheduleCleanup(room) {

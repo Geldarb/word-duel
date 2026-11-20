@@ -12,8 +12,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="icon" href="/icons/icon-192.png">
   <title>Word Duel</title>
-  <link rel="stylesheet" href="/styles.css?v=0.4">
-  <!-- WD-v0.4 -->
+  <link rel="stylesheet" href="/styles.css?v=0.5">
+  <!-- WD-v0.5 -->
 </head>
 <body>
   <div id="app">
@@ -34,7 +34,7 @@
             <span class="mini-tile tilt-right">D<sub>2</sub></span>
           </div>
           <h1>Word Duel</h1>
-          <p class="version" data-testid="version">v0.4</p>
+          <p class="version" data-testid="version">v0.5</p>
           <p class="tagline">A cosy word match for two.</p>
         </div>
         <form id="home-form" class="home-form" autocomplete="off">
@@ -45,6 +45,7 @@
           <div class="mode-picker" role="group" aria-label="Game mode" data-testid="mode-picker">
             <button type="button" class="mode-btn selected" data-mode="classic" data-testid="mode-classic">Word Duel</button>
             <button type="button" class="mode-btn" data-mode="story" data-testid="mode-story">Story Duel</button>
+            <button type="button" class="mode-btn" data-mode="race" data-testid="mode-race">Crossword Race</button>
           </div>
           <label class="fun-toggle" id="fun-toggle-wrap" data-classic-only>
             <input id="fun-mode" data-testid="fun-mode" type="checkbox">
@@ -56,6 +57,13 @@
             <div class="choice-row">
               <button type="button" class="choice-btn selected" data-length="5" data-testid="length-5">5 blanks</button>
               <button type="button" class="choice-btn" data-length="8" data-testid="length-8">8 blanks</button>
+            </div>
+          </div>
+          <div class="length-picker hidden" id="race-size-picker" data-race-only data-testid="race-size-picker">
+            <span>Puzzle size</span>
+            <div class="choice-row">
+              <button type="button" class="choice-btn selected" data-race-size="small" data-testid="race-small">Small · 5 letters</button>
+              <button type="button" class="choice-btn" data-race-size="medium" data-testid="race-medium">Medium · 6 letters</button>
             </div>
           </div>
           <button type="button" id="btn-create" class="big-btn" data-testid="create">Create room</button>
@@ -154,6 +162,38 @@
         <button type="button" id="btn-submit" class="pill-btn primary" data-testid="submit">Submit</button>
       </div>
       <div id="emoji-bar" class="emoji-bar" data-testid="emoji-bar" role="group" aria-label="Reactions"></div>
+    </section>
+
+
+    <section id="screen-race" class="screen hidden" data-testid="screen-race">
+      <div class="top-bar">
+        <button type="button" class="icon-btn back-btn" data-back aria-label="Back" data-testid="race-back">←</button>
+        <h2>Crossword Race</h2>
+        <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
+      </div>
+      <div class="race-meta" data-testid="race-meta">
+        <div class="race-progress you">
+          <span class="race-who" id="race-you-name">You</span>
+          <div class="bar" aria-hidden="true"><div id="race-you-bar" data-testid="race-you-bar"></div></div>
+          <span class="race-count" id="race-you-count" data-testid="race-you-count">0/0</span>
+        </div>
+        <div class="race-progress them">
+          <span class="race-who" id="race-opp-name">Opponent</span>
+          <div class="bar" aria-hidden="true"><div id="race-opp-bar" data-testid="race-opp-bar"></div></div>
+          <span class="race-count" id="race-opp-count" data-testid="race-opp-count">0/0</span>
+        </div>
+        <p id="race-time" class="race-time" data-testid="race-time">0:00</p>
+      </div>
+      <div id="race-grid-wrap" class="race-grid-wrap">
+        <div id="race-grid" class="race-grid" data-testid="race-grid"></div>
+      </div>
+      <p id="race-trace" class="race-trace" data-testid="race-trace" aria-live="polite"></p>
+      <div id="race-wheel-wrap" class="race-wheel-wrap" data-testid="race-wheel-wrap">
+        <svg id="race-path" class="race-path" aria-hidden="true"></svg>
+        <div id="race-wheel" class="race-wheel" data-testid="race-wheel"></div>
+      </div>
+      <button type="button" id="btn-race-shuffle" class="pill-btn" data-testid="race-shuffle">Shuffle</button>
+      <div id="race-emoji-bar" class="emoji-bar" data-testid="race-emoji-bar" role="group" aria-label="Reactions"></div>
     </section>
 
     <section id="screen-fill" class="screen hidden" data-testid="screen-fill">
@@ -280,6 +320,10 @@
           </div>
         </div>
         <div id="end-story" class="end-story" data-testid="end-story" hidden></div>
+        <div id="end-race" class="end-race" data-testid="end-race" hidden>
+          <p id="end-race-time" class="end-race-time" data-testid="end-race-time"></p>
+          <div id="end-race-grid" class="race-grid solved" data-testid="end-race-grid"></div>
+        </div>
       </div>
       <div class="end-actions">
         <button type="button" id="btn-rematch" class="big-btn" data-testid="rematch">Rematch</button>
@@ -315,6 +359,6 @@
     </div>
   </div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js?v=0.4"></script>
+  <script src="/app.js?v=0.5"></script>
 </body>
 </html>

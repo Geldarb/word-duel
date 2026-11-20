@@ -1,10 +1,10 @@
-const VERSION = 'WD-v0.4';
+const VERSION = 'WD-v0.5';
 const CACHE = 'word-duel-' + VERSION;
 const ASSETS = [
   '/',
   '/index.html',
-  '/styles.css?v=0.4',
-  '/app.js?v=0.4',
+  '/styles.css?v=0.5',
+  '/app.js?v=0.5',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

@@ -4,6 +4,7 @@ import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { loadDictionary, loadSlang, dictionarySize, slangSize, listSlang } from './dictionary.js';
+import { loadCommon, commonSize } from './crossword.js';
 import { RoomManager, VERSION, EMOJIS, DEFAULT_TURN_SECONDS } from './game.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,7 +13,8 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const wordCount = loadDictionary();
 const slangCount = loadSlang();
-console.log(`Word Duel ${VERSION} loaded ${wordCount} words, ${slangCount} slang`);
+const commonCount = loadCommon();
+console.log(`Word Duel ${VERSION} loaded ${wordCount} words, ${slangCount} slang, ${commonCount} common`);
 
 const app = express();
 const httpServer = createServer(app);
@@ -89,6 +91,8 @@ io.on('connection', (socket) => {
         funMode: payload.funMode,
         mode: payload.mode,
         storyLength: payload.storyLength,
+        raceSize: payload.raceSize,
+        puzzleSeed: payload.puzzleSeed,
         socketId: socket.id,
       });
       if (typeof cb === 'function') {
@@ -152,6 +156,12 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb({ ok: true });
   });
 
+  socket.on('submitRaceWord', (payload = {}, cb) => {
+    const result = manager.submitRaceWord(socket.id, payload.word);
+    if (result?.error) return ackError(cb, result.error);
+    if (typeof cb === 'function') cb({ ok: true, result: result.result, word: result.word });
+  });
+
   socket.on('submitStory', (payload = {}, cb) => {
     const result = manager.submitStory(socket.id, payload.answers);
     if (result?.error) return ackError(cb, result.error);
@@ -199,5 +209,5 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`Word Duel ${VERSION} listening on ${PORT} (${dictionarySize()} words, ${slangSize()} slang)`);
+  console.log(`Word Duel ${VERSION} listening on ${PORT} (${dictionarySize()} words, ${slangSize()} slang, ${commonSize()} common)`);
 });
