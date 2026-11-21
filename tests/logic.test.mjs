@@ -229,16 +229,19 @@ describe('fun mode slang', () => {
   before(() => {
     loadDictionary();
     const n = loadSlang();
-    assert.ok(n >= 300, `slang list should have several hundred entries, got ${n}`);
+    assert.ok(n >= 900, `slang list should have around a thousand entries, got ${n}`);
   });
 
   it('loads a letters-only slang list of 2 to 7 characters', () => {
     assert.equal(isSlangWord('rizz'), true);
     assert.equal(isSlangWord('yeet'), true);
     assert.equal(isSlangWord('peng'), true);
+    assert.equal(isSlangWord('rizzing'), true);
+    assert.equal(isSlangWord('pengest'), true);
+    assert.equal(isSlangWord('hella'), true);
     assert.equal(isSlangWord(''), false);
     assert.equal(isSlangWord('xqzqy'), false);
-    assert.ok(slangSize() >= 300);
+    assert.ok(slangSize() >= 900);
   });
 
   it('gives slang-only words their letter score plus two in Fun mode', () => {
@@ -250,6 +253,15 @@ describe('fun mode slang', () => {
     assert.equal(judged.word, 'RIZZ');
     assert.equal(judged.score, scoreWord('RIZZ') + SLANG_BONUS);
     assert.equal(SLANG_BONUS, 2);
+  });
+
+  it('gives newly added slang the same +2 bonus', () => {
+    assert.equal(isValidWord('pengest'), false);
+    const judged = judgeWord('pengest', ['P', 'E', 'N', 'G', 'E', 'S', 'T'], { funMode: true });
+    assert.equal(judged.valid, true);
+    assert.equal(judged.reason, 'slang');
+    assert.equal(judged.slang, true);
+    assert.equal(judged.score, scoreWord('PENGEST') + SLANG_BONUS);
   });
 
   it('rejects slang-only words in normal mode', () => {

@@ -24,7 +24,7 @@ import {
   VOTE_REVEAL_MS,
 } from './story.js';
 
-export const VERSION = 'v0.6';
+export const VERSION = 'v0.6.1';
 let commonLoaded = false;
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;

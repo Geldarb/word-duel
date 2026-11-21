@@ -6,7 +6,7 @@ seven-letter scramble. You can also pick **Story Duel**, a shared silly story
 with hidden answers, a dramatic reading, and anonymous votes, or **Crossword
 Race**, a head-to-head race to fill the same little crossword.
 
-**v0.6**
+**v0.6.1**
 
 Open the link on two phones, type a display name, choose Word Duel, Story
 Duel or Crossword Race, tap **Create room** on one and **Join** on the other,
@@ -36,7 +36,7 @@ the 60 second timer keeps running, and your partner sees a “🎲 rerolled!” 
 You can use more than one reroll in the same turn. While you build a word, a
 small “✓ word!” label appears under the rack if the selection is in the
 dictionary. The room creator can switch on Fun mode, which
-also accepts a curated slang list; slang-only words score their letter points
+also accepts a curated slang list of British, internet and rude words; slang-only words score their letter points
 plus two, shown as “slang +2”. A Fun mode words page in the menu lists the
 slang alphabetically. The main dictionary is left as it is, including proper
 nouns. See [DICTIONARY.md](DICTIONARY.md) for sources and licences.

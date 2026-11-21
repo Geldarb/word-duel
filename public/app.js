@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.6';
+  const VERSION = 'v0.6.1';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
