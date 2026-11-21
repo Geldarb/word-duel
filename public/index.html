@@ -12,8 +12,8 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <link rel="icon" href="/icons/icon-192.png">
   <title>Word Duel</title>
-  <link rel="stylesheet" href="/styles.css?v=0.5">
-  <!-- WD-v0.5 -->
+  <link rel="stylesheet" href="/styles.css?v=0.6">
+  <!-- WD-v0.6 -->
 </head>
 <body>
   <div id="app">
@@ -34,7 +34,7 @@
             <span class="mini-tile tilt-right">D<sub>2</sub></span>
           </div>
           <h1>Word Duel</h1>
-          <p class="version" data-testid="version">v0.5</p>
+          <p class="version" data-testid="version">v0.6</p>
           <p class="tagline">A cosy word match for two.</p>
         </div>
         <form id="home-form" class="home-form" autocomplete="off">
@@ -137,19 +137,24 @@
           <div class="score-chip you">
             <span class="score-name" id="you-name">You</span>
             <span class="score-num" id="you-score" data-testid="you-score">0</span>
+            <span class="reroll-count" id="you-rerolls" data-testid="you-rerolls" title="Rerolls left">🎲3</span>
           </div>
           <div class="score-chip them">
             <span class="score-num" id="opp-score" data-testid="opp-score">0</span>
             <span class="score-name" id="opp-name">Opponent</span>
+            <span class="reroll-count" id="opp-rerolls" data-testid="opp-rerolls" title="Rerolls left">🎲3</span>
           </div>
         </div>
         <button type="button" class="icon-btn fs-btn" data-fs aria-label="Full screen" hidden>⛶</button>
       </div>
       <div class="turn-meta">
         <div id="timer" class="timer" data-testid="timer"><span id="timer-num">60</span></div>
-        <p id="turn-status" class="turn-status" data-testid="turn-status">Your turn</p>
-        <p id="turn-count" class="turn-count" data-testid="turn-count">Turn 1 of 12</p>
-        <p class="fun-badge" data-fun-badge data-testid="fun-badge-play" hidden>Fun mode</p>
+        <div class="turn-copy">
+          <p id="turn-status" class="turn-status" data-testid="turn-status">Your turn</p>
+          <p id="turn-count" class="turn-count" data-testid="turn-count">Turn 1 of 12</p>
+          <p id="reroll-note" class="reroll-note" data-testid="reroll-note" hidden>🎲 rerolled!</p>
+          <p class="fun-badge" data-fun-badge data-testid="fun-badge-play" hidden>Fun mode</p>
+        </div>
       </div>
       <div class="word-area">
         <div id="word-rack" class="word-rack" data-testid="word-rack" aria-label="Your word"></div>
@@ -159,6 +164,7 @@
       <div class="play-actions">
         <button type="button" id="btn-clear" class="pill-btn" data-testid="clear">Clear</button>
         <button type="button" id="btn-shuffle" class="pill-btn" data-testid="shuffle">Shuffle</button>
+        <button type="button" id="btn-reroll" class="pill-btn reroll-btn" data-testid="reroll" aria-label="Reroll letters, 3 left">🎲 3</button>
         <button type="button" id="btn-submit" class="pill-btn primary" data-testid="submit">Submit</button>
       </div>
       <div id="emoji-bar" class="emoji-bar" data-testid="emoji-bar" role="group" aria-label="Reactions"></div>
@@ -359,6 +365,6 @@
     </div>
   </div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/app.js?v=0.5"></script>
+  <script src="/app.js?v=0.6"></script>
 </body>
 </html>

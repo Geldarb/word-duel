@@ -24,7 +24,7 @@ import {
   VOTE_REVEAL_MS,
 } from './story.js';
 
-export const VERSION = 'v0.5';
+export const VERSION = 'v0.6';
 let commonLoaded = false;
 export const TURNS_EACH = 6;
 export const TOTAL_TURNS = TURNS_EACH * 2;
@@ -36,6 +36,7 @@ export const ROOM_TTL_MS = 15 * 60 * 1000;
 export const REACTION_MIN_INTERVAL_MS = 900;
 export const CHECK_WORD_MIN_INTERVAL_MS = 150;
 export const SLANG_BONUS = 2;
+export const REROLLS_EACH = 3;
 export const DW_CHANCE = 0.28;
 export { STORY_FILL_SECONDS, VOTE_REVEAL_MS };
 
@@ -315,6 +316,7 @@ export class RoomManager {
       turnIndex: 0,
       current: null,
       lastResult: null,
+      lastReroll: null,
       rematch: { p1: false, p2: false },
       funMode: gameMode === 'classic' && !!funMode,
       story: null,
@@ -519,6 +521,40 @@ export class RoomManager {
     return { ok: true };
   }
 
+  reroll(socketId, token) {
+    const found = this._findPlayer(socketId, token);
+    if (!found) return { error: 'You are not in a match.' };
+    const { room, player } = found;
+    if (socketId && player.socketId !== socketId) {
+      player.socketId = socketId;
+      player.connected = true;
+    }
+    if (room.mode !== 'classic') return { error: 'Rerolls are only for Word Duel.' };
+    if (room.status === 'paused' && room.current?.paused) {
+      this._resumeTurn(room);
+      this._emit(room);
+    }
+    if (room.current?.paused || room.status === 'paused') {
+      return { error: 'Waiting for your opponent to return.' };
+    }
+    if (room.status !== 'playing' || !room.current) return { error: 'It is not time to play a word.' };
+    if (room.current.playerId !== player.id) return { error: 'It is not your turn.' };
+    if (room.current.submitted) return { error: 'You have already played this turn.' };
+    if ((player.rerollsLeft || 0) <= 0) return { error: 'No rerolls left.' };
+    player.rerollsLeft -= 1;
+    const letters = generateScramble();
+    room.current.letters = letters;
+    room.current.bonus = assignBonus(letters.length);
+    room.current.scrambleId = (room.current.scrambleId || 0) + 1;
+    room.lastReroll = {
+      playerId: player.id,
+      turnNumber: room.current.turnNumber,
+      at: this.now(),
+    };
+    this._emit(room);
+    return { ok: true };
+  }
+
   rematch(socketId) {
     const found = this._findBySocket(socketId);
     if (!found) return { error: 'You are not in a match.' };
@@ -550,6 +586,7 @@ export class RoomManager {
           paused: !!room.current.paused,
           submitted: !!room.current.submitted,
           yours: room.current.playerId === forPlayerId,
+          scrambleId: room.current.scrambleId || 0,
         }
       : null;
     return {
@@ -568,6 +605,7 @@ export class RoomManager {
       opponent: opponent ? this._publicPlayer(opponent, false) : null,
       current,
       lastResult: room.lastResult,
+      lastReroll: this._serializeLastReroll(room, forPlayerId),
       funMode: !!room.funMode,
       story: this._serializeStory(room, forPlayerId),
       race: this._serializeRace(room, forPlayerId),
@@ -576,6 +614,18 @@ export class RoomManager {
         you: !!(you && room.rematch[you.id]),
         opponent: !!(opponent && room.rematch[opponent.id]),
       },
+    };
+  }
+
+  _serializeLastReroll(room, forPlayerId) {
+    const event = room.lastReroll;
+    if (!event) return null;
+    const who = room.players[event.playerId];
+    return {
+      playerId: event.playerId,
+      yours: event.playerId === forPlayerId,
+      name: who?.name || 'Player',
+      turnNumber: event.turnNumber || 0,
     };
   }
 
@@ -743,6 +793,7 @@ export class RoomManager {
       connected: true,
       score: 0,
       history: [],
+      rerollsLeft: REROLLS_EACH,
       lastReactionAt: 0,
       lastCheckAt: 0,
     };
@@ -755,6 +806,7 @@ export class RoomManager {
       connected: player.connected,
       score: player.score,
       history: player.history,
+      rerollsLeft: player.rerollsLeft ?? 0,
       token: includeToken ? player.token : undefined,
     };
   }
@@ -786,7 +838,10 @@ export class RoomManager {
     room.firstPlayerId = flipCoin();
     room.turnIndex = 0;
     room.lastResult = null;
+    room.lastReroll = null;
     room.rematch = { p1: false, p2: false };
+    if (room.players.p1) room.players.p1.rerollsLeft = REROLLS_EACH;
+    if (room.players.p2) room.players.p2.rerollsLeft = REROLLS_EACH;
     this._emit(room);
     this._setTimer(room.code, 'coin', () => {
       if (!this.rooms.has(room.code) || room.status !== 'coin') return;
@@ -804,10 +859,12 @@ export class RoomManager {
     const letters = generateScramble();
     const now = this.now();
     room.status = 'playing';
+    room.lastReroll = null;
     room.current = {
       playerId,
       letters,
       bonus: assignBonus(letters.length),
+      scrambleId: 1,
       turnNumber: room.turnIndex + 1,
       startedAt: now,
       endsAt: now + room.turnSeconds * 1000,
@@ -1081,8 +1138,11 @@ export class RoomManager {
     room.turnIndex = 0;
     room.current = null;
     room.lastResult = null;
+    room.lastReroll = null;
     room.winnerId = null;
     room.rematch = { p1: false, p2: false };
+    room.players.p1.rerollsLeft = REROLLS_EACH;
+    room.players.p2.rerollsLeft = REROLLS_EACH;
     room.matchId = randomUUID();
     room.story = null;
     room.race = null;

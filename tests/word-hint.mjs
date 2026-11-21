@@ -78,7 +78,7 @@ async function tapLetters(page, word) {
   for (const ch of word.split('')) {
     const clicked = await page.evaluate((letter) => {
       const buttons = [...document.querySelectorAll('[data-testid="tile-tray"] button.tile:not(.used)')];
-      const btn = buttons.find((b) => (b.childNodes[0]?.textContent || '').trim() === letter);
+      const btn = buttons.find((b) => (b.dataset.letter || '').toUpperCase() === letter);
       if (!btn) return false;
       btn.click();
       return true;

@@ -180,6 +180,12 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb({ ok: true, word: result.word, valid: !!result.valid, slang: !!result.slang });
   });
 
+  socket.on('reroll', (payload = {}, cb) => {
+    const result = manager.reroll(socket.id, payload.token);
+    if (result?.error) return ackError(cb, result.error);
+    if (typeof cb === 'function') cb({ ok: true });
+  });
+
   socket.on('react', (payload = {}, cb) => {
     const result = manager.react(socket.id, payload.emoji);
     if (result?.error) return ackError(cb, result.error);

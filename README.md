@@ -6,7 +6,7 @@ seven-letter scramble. You can also pick **Story Duel**, a shared silly story
 with hidden answers, a dramatic reading, and anonymous votes, or **Crossword
 Race**, a head-to-head race to fill the same little crossword.
 
-**v0.5**
+**v0.6**
 
 Open the link on two phones, type a display name, choose Word Duel, Story
 Duel or Crossword Race, tap **Create room** on one and **Join** on the other,
@@ -31,8 +31,11 @@ Each classic match is 6 turns each (12 in total). You have 60 seconds to make
 one word of at least 2 letters. Letter points are shown on every tile. Each
 turn, one tile is a double letter (DL) or, less often, a double word (DW);
 using that tile applies the bonus, and the turn result shows the breakdown.
-While you build a word, a small “✓ word!” label appears under the rack if the
-selection is in the dictionary. The room creator can switch on Fun mode, which
+Each of you has 3 chances in a match to reroll your letters on your own turn;
+the 60 second timer keeps running, and your partner sees a “🎲 rerolled!” note.
+You can use more than one reroll in the same turn. While you build a word, a
+small “✓ word!” label appears under the rack if the selection is in the
+dictionary. The room creator can switch on Fun mode, which
 also accepts a curated slang list; slang-only words score their letter points
 plus two, shown as “slang +2”. A Fun mode words page in the menu lists the
 slang alphabetically. The main dictionary is left as it is, including proper
@@ -70,4 +73,5 @@ npm test
 LIVE_URL=https://word-duel-8a46.onrender.com npm run test:live
 LIVE_URL=https://word-duel-8a46.onrender.com npm run test:live-story
 LIVE_URL=https://word-duel-8a46.onrender.com npm run test:live-race
+LIVE_URL=https://word-duel-8a46.onrender.com npm run test:live-reroll
 ```

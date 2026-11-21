@@ -1,5 +1,5 @@
 (() => {
-  const VERSION = 'v0.5';
+  const VERSION = 'v0.6';
   const EMOJIS = ['😍', '😂', '😮', '👏', '🔥', '😭', '😘', '🙈'];
   const NAME_KEY = 'wordduel_name';
   const TOKEN_KEY = 'wordduel_token';
@@ -62,6 +62,9 @@
     timerNum: $('#timer-num'),
     turnStatus: $('#turn-status'),
     turnCount: $('#turn-count'),
+    youRerolls: $('#you-rerolls'),
+    oppRerolls: $('#opp-rerolls'),
+    rerollNote: $('#reroll-note'),
     rack: $('#word-rack'),
     wordHint: $('#word-hint'),
     resultSlang: $('#result-slang'),
@@ -69,6 +72,7 @@
     tray: $('#tile-tray'),
     clear: $('#btn-clear'),
     shuffle: $('#btn-shuffle'),
+    reroll: $('#btn-reroll'),
     submit: $('#btn-submit'),
     emojiBar: $('#emoji-bar'),
     endEmojiBar: $('#end-emoji-bar'),
@@ -155,6 +159,8 @@
   let fillBoundFor = '';
   let fillAnswers = [];
   let lastTurnKey = '';
+  let lastScrambleId = 0;
+  let tileOrderSeq = 0;
   let lastResultKey = '';
   let lastHintShown = false;
   let lastRevealKey = '';
@@ -506,9 +512,12 @@
   function syncTilesFromState() {
     const letters = state.current?.letters || [];
     const values = state.current?.values || [];
+    const scrambleId = state.current?.scrambleId || 0;
     const same = tiles.length === letters.length
+      && lastScrambleId === scrambleId
       && tiles.every((t, i) => t.letter === letters[i]);
     if (!same) {
+      lastScrambleId = scrambleId;
       tiles = letters.map((letter, i) => ({
         id: i,
         letter,
@@ -863,6 +872,7 @@
     if (paused) els.turnStatus.textContent = 'Paused — waiting…';
     else if (yours) els.turnStatus.textContent = 'Your turn';
     else els.turnStatus.textContent = `${opp?.name || 'Opponent'} is thinking…`;
+    renderRerollUi(yours, paused);
     syncTilesFromState();
     if (turn) {
       localEnd = Date.now() + (turn.remainingMs || 0);
@@ -874,6 +884,28 @@
     els.shuffle.disabled = !canPlay;
     els.submit.disabled = !canPlay;
     maybeAnnounceTurn();
+  }
+
+  function formatRerolls(n) {
+    return `🎲${Number.isFinite(n) ? n : 0}`;
+  }
+
+  function renderRerollUi(yours, paused) {
+    const youLeft = state?.you?.rerollsLeft ?? 0;
+    const oppLeft = state?.opponent?.rerollsLeft ?? 0;
+    if (els.youRerolls) els.youRerolls.textContent = formatRerolls(youLeft);
+    if (els.oppRerolls) els.oppRerolls.textContent = formatRerolls(oppLeft);
+    if (els.reroll) {
+      els.reroll.textContent = `🎲 ${youLeft}`;
+      els.reroll.setAttribute('aria-label', `Reroll letters, ${youLeft} left`);
+      els.reroll.disabled = !yours || paused || youLeft <= 0;
+    }
+    const note = state?.lastReroll;
+    const showNote = !!(note && !note.yours && (!state.current || note.turnNumber === state.current.turnNumber));
+    if (els.rerollNote) {
+      els.rerollNote.hidden = !showNote;
+      if (showNote) els.rerollNote.textContent = '🎲 rerolled!';
+    }
   }
 
   function currentWord() {
@@ -1008,6 +1040,7 @@
       + (isBonus && bonus.type === 'DL' ? ' bonus-dl' : '')
       + (isBonus && bonus.type === 'DW' ? ' bonus-dw' : '');
     btn.dataset.id = String(tile.id);
+    btn.dataset.letter = tile.letter;
     const tag = isBonus ? `<span class="bonus-tag">${bonus.type}</span>` : '';
     btn.innerHTML = `${tag}${tile.letter}<span class="val">${tile.value}</span>`;
     const canPlay = !!(state?.current?.yours && state.status === 'playing' && !state.current.paused);
@@ -1020,7 +1053,7 @@
         delete tile.order;
       } else if (!tile.used) {
         tile.used = true;
-        tile.order = Date.now();
+        tile.order = ++tileOrderSeq;
       }
       renderRackAndTray();
     });
@@ -1613,6 +1646,14 @@
     renderRackAndTray();
   });
 
+  els.reroll.addEventListener('click', () => {
+    if (els.reroll.disabled) return;
+    soundTap();
+    socket.emit('reroll', { token }, (res) => {
+      if (res?.error) return;
+    });
+  });
+
   els.submit.addEventListener('click', () => {
     const used = currentWord();
     const word = used.map((t) => t.letter).join('');
@@ -1695,10 +1736,13 @@
     leavingConfirmed = false;
     const prevLetters = state?.current?.letters?.join('') || '';
     const nextLetters = next?.current?.letters?.join('') || '';
+    const prevScramble = `${state?.current?.scrambleId || 0}:${prevLetters}`;
+    const nextScramble = `${next?.current?.scrambleId || 0}:${nextLetters}`;
     state = next;
     if (next?.you?.token) rememberToken(next.you.token);
-    if (prevLetters !== nextLetters) {
+    if (prevScramble !== nextScramble) {
       tiles = [];
+      lastScrambleId = 0;
       lastCheckedWord = '';
       lastCheckValid = false;
       lastCheckSlang = false;
@@ -1784,6 +1828,9 @@
     }),
     checkWord: (word) => new Promise((resolve) => {
       socket.emit('checkWord', { word, token }, resolve);
+    }),
+    reroll: () => new Promise((resolve) => {
+      socket.emit('reroll', { token }, resolve);
     }),
     submitStory: (answers) => new Promise((resolve) => {
       socket.emit('submitStory', { answers }, resolve);

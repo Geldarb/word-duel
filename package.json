@@ -1,6 +1,6 @@
 {
   "name": "word-duel",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "description": "A cosy real-time 1v1 turn-based word game for two phones.",
   "type": "module",
@@ -11,9 +11,11 @@
     "test:live": "node tests/live-match.mjs",
     "test:live-story": "node tests/live-story.mjs",
     "test:live-race": "node tests/live-race.mjs",
+    "test:live-reroll": "node tests/live-reroll.mjs",
     "test:check-word": "node tests/live-check-word.mjs",
     "screenshots": "node tests/screenshots.mjs",
-    "screenshots:v05": "node tests/screenshots-v05.mjs"
+    "screenshots:v05": "node tests/screenshots-v05.mjs",
+    "screenshots:v06": "node tests/screenshots-v06.mjs"
   },
   "engines": {
     "node": ">=20"

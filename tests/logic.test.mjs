@@ -17,6 +17,7 @@ import {
   RoomManager,
   CHECK_WORD_MIN_INTERVAL_MS,
   SLANG_BONUS,
+  REROLLS_EACH,
 } from '../server/game.js';
 
 describe('dictionary', () => {
@@ -323,5 +324,155 @@ describe('fun mode slang', () => {
     assert.equal(normal.room.lastResult.score, 0);
     manager._clearTimers(room.code);
     plain._clearTimers(normal.room.code);
+  });
+});
+
+describe('rerolls', () => {
+  let now;
+  let manager;
+  let room;
+
+  before(() => {
+    loadDictionary();
+    loadSlang();
+    // crossword common list is loaded lazily by race rooms
+  });
+
+  function playState({ funMode = false } = {}) {
+    now = 10_000;
+    manager = new RoomManager({ now: () => now, turnSeconds: 60, onEmit() {} });
+    const created = manager.createRoom({ name: 'Ada', socketId: 's1', funMode });
+    room = created.room;
+    manager.joinRoom({ code: room.code, name: 'Bea', socketId: 's2' });
+    manager._clearTimers(room.code);
+    room.status = 'playing';
+    room.firstPlayerId = 'p1';
+    room.turnIndex = 0;
+    room.lastReroll = null;
+    room.current = {
+      playerId: 'p1',
+      letters: ['C', 'O', 'L', 'O', 'U', 'R', 'S'],
+      bonus: { type: 'DL', index: 0 },
+      scrambleId: 1,
+      turnNumber: 1,
+      startedAt: now,
+      endsAt: now + 60_000,
+      remainingMs: 60_000,
+      paused: false,
+      submitted: false,
+    };
+  }
+
+  it('gives each player 3 rerolls and swaps the scramble without resetting the timer', () => {
+    playState();
+    assert.equal(REROLLS_EACH, 3);
+    assert.equal(room.players.p1.rerollsLeft, 3);
+    assert.equal(room.players.p2.rerollsLeft, 3);
+    const endsAt = room.current.endsAt;
+    const firstId = room.current.scrambleId;
+    const firstBonus = { ...room.current.bonus };
+    const res = manager.reroll('s1');
+    assert.equal(res.ok, true, JSON.stringify(res));
+    assert.equal(room.players.p1.rerollsLeft, 2);
+    assert.equal(room.players.p2.rerollsLeft, 3);
+    assert.equal(room.current.endsAt, endsAt);
+    assert.equal(room.current.letters.length, 7);
+    assert.ok(vowelCount(room.current.letters) >= 2, room.current.letters.join(''));
+    assert.equal(room.current.scrambleId, firstId + 1);
+    assert.ok(room.current.bonus && typeof room.current.bonus.index === 'number');
+    assert.ok(room.current.bonus.type === 'DL' || room.current.bonus.type === 'DW');
+    assert.equal(room.lastReroll.playerId, 'p1');
+    const ada = manager.serialize(room, 'p1');
+    const bea = manager.serialize(room, 'p2');
+    assert.equal(ada.you.rerollsLeft, 2);
+    assert.equal(ada.opponent.rerollsLeft, 3);
+    assert.equal(ada.lastReroll.yours, true);
+    assert.equal(bea.lastReroll.yours, false);
+    assert.equal(bea.lastReroll.playerId, 'p1');
+    assert.deepEqual(firstBonus, { type: 'DL', index: 0 }); // original unused after reroll
+  });
+
+  it('lets you use several remaining rerolls in one turn, but not a fourth', () => {
+    playState();
+    assert.equal(manager.reroll('s1').ok, true);
+    assert.equal(manager.reroll('s1').ok, true);
+    assert.equal(manager.reroll('s1').ok, true);
+    assert.equal(room.players.p1.rerollsLeft, 0);
+    const noMore = manager.reroll('s1');
+    assert.equal(noMore.error, 'No rerolls left.');
+    assert.equal(room.current.scrambleId, 4);
+  });
+
+  it('rejects a reroll that is not your turn, or not in a live classic turn', () => {
+    playState();
+    const opp = manager.reroll('s2');
+    assert.equal(opp.error, 'It is not your turn.');
+    assert.equal(room.players.p2.rerollsLeft, 3);
+    assert.equal(manager.reroll('s9').error, 'You are not in a match.');
+    manager.disconnect('s2');
+    const paused = manager.reroll('s1');
+    assert.equal(paused.error, 'Waiting for your opponent to return.');
+    manager.resume({ token: room.players.p2.token, socketId: 's2', name: 'Bea' });
+    room.current.submitted = true;
+    assert.equal(manager.reroll('s1').error, 'You have already played this turn.');
+  });
+
+  it('still rerolls after resume, including with only the session token', () => {
+    playState();
+    const token = room.players.p1.token;
+    manager.disconnect('s1');
+    const viaToken = manager.reroll('s1-new', token);
+    assert.equal(viaToken.ok, true, JSON.stringify(viaToken));
+    assert.equal(room.players.p1.socketId, 's1-new');
+    assert.equal(room.players.p1.rerollsLeft, 2);
+    manager.disconnect('s1-new');
+    const resumed = manager.resume({ token, socketId: 's1-resumed', name: 'Ada' });
+    assert.equal(resumed.resumed, true);
+    const after = manager.reroll('s1-resumed');
+    assert.equal(after.ok, true);
+    assert.equal(room.players.p1.rerollsLeft, 1);
+    const letters = room.current.letters;
+    const word = canForm('COLOUR', letters) ? 'COLOUR' : letters.slice(0, 2).join('');
+    // checkWord must use the new letters, not the pre-reroll rack
+    const check = manager.checkWord('s1-resumed', 'COLOURS');
+    assert.equal(check.ok, true);
+    assert.equal(check.valid, canForm('COLOURS', letters) && true);
+    manager._clearTimers(room.code);
+  });
+
+  it('accepts a reroll in Fun mode and refuses Story Duel and Crossword Race', () => {
+    playState({ funMode: true });
+    assert.equal(room.funMode, true);
+    assert.equal(manager.reroll('s1').ok, true);
+
+    const storyMgr = new RoomManager({ now: () => 20_000, turnSeconds: 60, onEmit() {} });
+    const story = storyMgr.createRoom({ name: 'Ada', socketId: 'a1', mode: 'story' });
+    storyMgr.joinRoom({ code: story.room.code, name: 'Bea', socketId: 'a2' });
+    storyMgr._clearTimers(story.room.code);
+    const storyRes = storyMgr.reroll('a1');
+    assert.equal(storyRes.error, 'Rerolls are only for Word Duel.');
+
+    const raceMgr = new RoomManager({ now: () => 30_000, turnSeconds: 60, onEmit() {} });
+    const race = raceMgr.createRoom({ name: 'Ada', socketId: 'r1', mode: 'race' });
+    raceMgr.joinRoom({ code: race.room.code, name: 'Bea', socketId: 'r2' });
+    raceMgr._clearTimers(race.room.code);
+    const raceRes = raceMgr.reroll('r1');
+    assert.equal(raceRes.error, 'Rerolls are only for Word Duel.');
+    storyMgr._clearTimers(story.room.code);
+    raceMgr._clearTimers(race.room.code);
+    manager._clearTimers(room.code);
+  });
+
+  it('resets both players to 3 rerolls on rematch', () => {
+    playState();
+    room.players.p1.rerollsLeft = 1;
+    room.players.p2.rerollsLeft = 0;
+    manager._endGame(room);
+    assert.equal(manager.rematch('s1').ok, true);
+    assert.equal(manager.rematch('s2').ok, true);
+    assert.equal(room.players.p1.rerollsLeft, 3);
+    assert.equal(room.players.p2.rerollsLeft, 3);
+    assert.equal(room.lastReroll, null);
+    manager._clearTimers(room.code);
   });
 });

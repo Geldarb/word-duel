@@ -175,4 +175,74 @@ describe('checkWord for creator, joiner, and resume', () => {
     resumed.close();
     resumed2.close();
   });
+
+  it('rerolls letters for the active player, shows the partner a note, and still checks words', async () => {
+    const ada = await connect('Ada');
+    const bea = await connect('Bea');
+    const created = await emit(ada, 'createRoom', {
+      name: 'Ada',
+      testSecret: SECRET,
+      turnSeconds: 45,
+    });
+    assert.equal(created.ok, true);
+    const joined = await emit(bea, 'joinRoom', { name: 'Bea', code: created.code });
+    assert.equal(joined.ok, true);
+
+    await waitFor(ada, (s) => s?.status === 'playing' && s.current, 'first turn');
+    await waitFor(bea, (s) => s?.status === 'playing' && s.current, 'first turn bea');
+
+    const first = ada.state.current.yours ? ada : bea;
+    const second = first === ada ? bea : ada;
+    assert.equal(first.state.you.rerollsLeft, 3);
+    assert.equal(second.state.you.rerollsLeft, 3);
+    const beforeLetters = first.state.current.letters.join('');
+    const endsAt = first.state.current.endsAt;
+    const scrambleId = first.state.current.scrambleId;
+
+    const denied = await emit(second, 'reroll', { token: second.state.you.token });
+    assert.equal(denied.error, 'It is not your turn.');
+
+    const rolled = await emit(first, 'reroll', { token: first.state.you.token });
+    assert.equal(rolled.ok, true, JSON.stringify(rolled));
+    await waitFor(first, (s) => s?.current?.scrambleId === scrambleId + 1, 'reroll first');
+    await waitFor(second, (s) => s?.lastReroll && s.lastReroll.yours === false, 'partner sees reroll');
+
+    assert.equal(first.state.you.rerollsLeft, 2);
+    assert.equal(second.state.opponent.rerollsLeft, 2);
+    assert.equal(first.state.current.endsAt, endsAt);
+    assert.equal(first.state.current.letters.length, 7);
+    assert.notEqual(first.state.current.letters.join(''), beforeLetters);
+    assert.equal(second.state.lastReroll.yours, false);
+    assert.equal(second.state.lastReroll.playerId, first.state.you.id);
+
+    const word = findValid(first.state.current.letters);
+    assert.ok(word, `no valid word in ${first.state.current.letters.join('')}`);
+    const hint = await emit(first, 'checkWord', { word, token: first.state.you.token });
+    assert.equal(hint.ok, true, JSON.stringify(hint));
+    assert.equal(hint.valid, true, `${word} should be valid after reroll`);
+
+    // Resume still sees the new letters and can reroll again in the same turn.
+    const token = first.state.you.token;
+    const name = first.name;
+    const lettersAfter = first.state.current.letters.join('');
+    first.disconnect();
+    first.close();
+    const resumed = await connect(`${name}-resumed`);
+    const resumeRes = await emit(resumed, 'resume', { token, name });
+    assert.equal(resumeRes.ok, true);
+    await waitFor(resumed, (s) => s?.status === 'playing' && s.current?.yours && !s.current.paused, 'resumed after reroll');
+    assert.equal(resumed.state.current.letters.join(''), lettersAfter);
+    assert.equal(resumed.state.you.rerollsLeft, 2);
+    const rolledAgain = await emit(resumed, 'reroll', { token });
+    assert.equal(rolledAgain.ok, true, JSON.stringify(rolledAgain));
+    await waitFor(resumed, (s) => s?.you?.rerollsLeft === 1, 'second reroll same turn');
+    const word2 = findValid(resumed.state.current.letters);
+    assert.ok(word2, `no valid word after second reroll in ${resumed.state.current.letters.join('')}`);
+    const hint2 = await emit(resumed, 'checkWord', { word: word2, token });
+    assert.equal(hint2.valid, true, JSON.stringify(hint2));
+
+    ada.close();
+    bea.close();
+    resumed.close();
+  });
 });

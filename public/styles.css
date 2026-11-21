@@ -435,7 +435,7 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 72px;
+  max-width: 56px;
 }
 
 .score-num { font-weight: 800; font-size: 1.05rem; }
@@ -479,11 +479,36 @@ h1 {
   font-size: 1.05rem;
 }
 
+.turn-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
 .turn-count {
   margin: 0;
   color: var(--ink-soft);
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.reroll-note {
+  margin: 0;
+  color: var(--pink-hot);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.reroll-note[hidden] { display: none !important; }
+
+.reroll-count {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .word-area {
@@ -585,6 +610,12 @@ h1 {
 
 .pill-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--tile-edge); }
 .pill-btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.pill-btn.reroll-btn {
+  flex: 1.05;
+  font-size: 0.95rem;
+  padding: 0 8px;
+}
 
 .pill-btn.primary {
   background: linear-gradient(180deg, #ff9eb3 0%, #ee7a96 100%);
@@ -807,8 +838,11 @@ h1 {
   .word-rack { min-height: 52px; }
   .word-hint { font-size: 0.8rem; min-height: 1.15em; margin-top: 2px; }
   .tile { width: 46px; height: 50px; font-size: 1.25rem; border-radius: 10px; }
-  .play-actions { margin-bottom: 4px; }
+  .play-actions { margin-bottom: 4px; gap: 6px; }
   .pill-btn, .emoji-btn { height: 38px; }
+  .pill-btn.reroll-btn { font-size: 0.85rem; }
+  .reroll-note { font-size: 0.72rem; }
+  .reroll-count { font-size: 0.65rem; }
   .timer { width: 40px; height: 40px; font-size: 0.95rem; border-width: 3px; }
   .coin { width: 72px; height: 72px; margin: 4px auto 8px; }
   .coin-face { font-size: 1.8rem; }
@@ -847,6 +881,7 @@ h1 {
   #screen-play.hidden { display: none !important; }
   #screen-play .top-bar { grid-area: bar; }
   #screen-play .turn-meta { grid-area: meta; flex-direction: column; align-items: flex-start; margin: 0; }
+  #screen-play .turn-copy { width: 100%; }
   #screen-play .word-area { grid-area: rack; margin: 0; align-self: center; width: 100%; overflow: visible; }
   #screen-play .word-rack { margin: 0; max-height: 64px; }
   #screen-play .tile-tray { grid-area: tray; margin: 0; align-content: center; align-self: center; }
@@ -1476,4 +1511,13 @@ h1 {
   #screen-home .length-picker > span { display: none; }
   #screen-home .home-form { gap: 4px; margin: 0 auto 4px; }
   #screen-home .home-history { display: none; }
+}
+
+/* v0.6 rerolls */
+@media (max-height: 700px) {
+  .play-actions { gap: 6px; margin-bottom: 6px; }
+  .pill-btn { height: 44px; }
+  .tile { width: 52px; height: 58px; font-size: 1.4rem; }
+  .word-rack { min-height: 60px; }
+  .score-chip { padding: 4px 8px; gap: 4px; }
 }
